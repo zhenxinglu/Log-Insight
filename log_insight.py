@@ -39,6 +39,12 @@ class LogInsight:
         self.include_var: tk.StringVar = tk.StringVar()
         self.include_entry: ttk.Entry = ttk.Entry(self.filter_frame, textvariable=self.include_var, width=80)
         self.include_entry.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        # 添加占位文本
+        self.include_entry.insert(0, "keyword1 \"multiple words keywords\" keyword3")
+        self.include_entry.bind("<FocusIn>", lambda event: self.clear_placeholder(event, self.include_entry, self.include_var))
+        self.include_entry.bind("<FocusOut>", lambda event: self.restore_placeholder(event, self.include_entry, self.include_var, "keyword1 \"multiple words keywords\" keyword3"))
+        # 设置占位文本样式
+        self.set_placeholder_style(self.include_entry, True)
         
         # 包含关键字大小写敏感开关
         self.include_case_sensitive_var: tk.BooleanVar = tk.BooleanVar(value=False)
@@ -50,6 +56,12 @@ class LogInsight:
         self.exclude_var: tk.StringVar = tk.StringVar()
         self.exclude_entry: ttk.Entry = ttk.Entry(self.filter_frame, textvariable=self.exclude_var, width=80)
         self.exclude_entry.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        # 添加占位文本
+        self.exclude_entry.insert(0, "keyword1 \"multiple words keywords\" keyword3")
+        self.exclude_entry.bind("<FocusIn>", lambda event: self.clear_placeholder(event, self.exclude_entry, self.exclude_var))
+        self.exclude_entry.bind("<FocusOut>", lambda event: self.restore_placeholder(event, self.exclude_entry, self.exclude_var, "keyword1 \"multiple words keywords\" keyword3"))
+        # 设置占位文本样式
+        self.set_placeholder_style(self.exclude_entry, True)
         
         # 排除关键字大小写敏感开关
         self.exclude_case_sensitive_var: tk.BooleanVar = tk.BooleanVar(value=False)
@@ -65,12 +77,24 @@ class LogInsight:
         self.start_time_var: tk.StringVar = tk.StringVar()
         self.start_time_entry: ttk.Entry = ttk.Entry(self.time_frame, textvariable=self.start_time_var, width=20)
         self.start_time_entry.pack(side=tk.LEFT, padx=5)
+        # 添加占位文本
+        self.start_time_entry.insert(0, "2023-01-01 00:00:00")
+        self.start_time_entry.bind("<FocusIn>", lambda event: self.clear_placeholder(event, self.start_time_entry, self.start_time_var))
+        self.start_time_entry.bind("<FocusOut>", lambda event: self.restore_placeholder(event, self.start_time_entry, self.start_time_var, "2023-01-01 00:00:00"))
+        # 设置占位文本样式
+        self.set_placeholder_style(self.start_time_entry, True)
         
         ttk.Label(self.time_frame, text="至").pack(side=tk.LEFT, padx=5)
         
         self.end_time_var: tk.StringVar = tk.StringVar()
         self.end_time_entry: ttk.Entry = ttk.Entry(self.time_frame, textvariable=self.end_time_var, width=20)
         self.end_time_entry.pack(side=tk.LEFT, padx=5)
+        # 添加占位文本
+        self.end_time_entry.insert(0, "2023-12-31 23:59:59")
+        self.end_time_entry.bind("<FocusIn>", lambda event: self.clear_placeholder(event, self.end_time_entry, self.end_time_var))
+        self.end_time_entry.bind("<FocusOut>", lambda event: self.restore_placeholder(event, self.end_time_entry, self.end_time_var, "2023-12-31 23:59:59"))
+        # 设置占位文本样式
+        self.set_placeholder_style(self.end_time_entry, True)
         
         # 按钮框架
         self.button_frame: ttk.Frame = ttk.Frame(self.main_frame)
@@ -152,14 +176,27 @@ class LogInsight:
         
         # 解析包含关键字（使用空格分隔，支持引号包含空格的关键字）
         include_input: str = self.include_var.get().strip()
+        # 检查是否是占位文本
+        if include_input == "keyword1 \"multiple words keywords\" keyword3":
+            include_input = ""
         include_terms: List[str] = self.parse_keywords(include_input)
         
         # 解析排除关键字（使用空格分隔，支持引号包含空格的关键字）
         exclude_input: str = self.exclude_var.get().strip()
+        # 检查是否是占位文本
+        if exclude_input == "keyword1 \"multiple words keywords\" keyword3":
+            exclude_input = ""
         exclude_terms: List[str] = self.parse_keywords(exclude_input)
         
         start_time: str = self.start_time_var.get().strip()
+        # 检查是否是占位文本
+        if start_time == "2023-01-01 00:00:00":
+            start_time = ""
+            
         end_time: str = self.end_time_var.get().strip()
+        # 检查是否是占位文本
+        if end_time == "2023-12-31 23:59:59":
+            end_time = ""
         
         # 保存当前搜索条件
         self.save_config()
@@ -172,17 +209,21 @@ class LogInsight:
         
         include_patterns: List[Pattern] = []
         for term in include_terms:
+            # 将关键字作为普通字符串处理，而不是正则表达式
+            escaped_term = re.escape(term)
             if include_case_sensitive:
-                include_patterns.append(re.compile(term))
+                include_patterns.append(re.compile(escaped_term))
             else:
-                include_patterns.append(re.compile(term, re.IGNORECASE))
+                include_patterns.append(re.compile(escaped_term, re.IGNORECASE))
         
         exclude_patterns: List[Pattern] = []
         for term in exclude_terms:
+            # 将关键字作为普通字符串处理，而不是正则表达式
+            escaped_term = re.escape(term)
             if exclude_case_sensitive:
-                exclude_patterns.append(re.compile(term))
+                exclude_patterns.append(re.compile(escaped_term))
             else:
-                exclude_patterns.append(re.compile(term, re.IGNORECASE))
+                exclude_patterns.append(re.compile(escaped_term, re.IGNORECASE))
         
         # 时间格式检查
         time_format: str = "%Y-%m-%d %H:%M:%S"
@@ -305,14 +346,31 @@ class LogInsight:
 
     def save_config(self) -> None:
         """保存当前配置到配置文件"""
+        # 获取当前值，但不保存占位文本
+        include_keywords = self.include_var.get()
+        if include_keywords == "keyword1 \"multiple words keywords\" keyword3":
+            include_keywords = ""
+            
+        exclude_keywords = self.exclude_var.get()
+        if exclude_keywords == "keyword1 \"multiple words keywords\" keyword3":
+            exclude_keywords = ""
+            
+        start_time = self.start_time_var.get()
+        if start_time == "2023-01-01 00:00:00":
+            start_time = ""
+            
+        end_time = self.end_time_var.get()
+        if end_time == "2023-12-31 23:59:59":
+            end_time = ""
+        
         config: Dict[str, Any] = {
             "current_file": self.current_file,
-            "include_keywords": self.include_var.get(),
+            "include_keywords": include_keywords,
             "include_case_sensitive": self.include_case_sensitive_var.get(),
-            "exclude_keywords": self.exclude_var.get(),
+            "exclude_keywords": exclude_keywords,
             "exclude_case_sensitive": self.exclude_case_sensitive_var.get(),
-            "start_time": self.start_time_var.get(),
-            "end_time": self.end_time_var.get()
+            "start_time": start_time,
+            "end_time": end_time
         }
         
         try:
@@ -333,18 +391,30 @@ class LogInsight:
                 config = json.load(f)
             
             # 恢复上次的设置
-            if "include_keywords" in config:
+            if "include_keywords" in config and config["include_keywords"] and config["include_keywords"] != "keyword1 \"multiple words keywords\" keyword3":
                 self.include_var.set(config["include_keywords"])
+                self.set_placeholder_style(self.include_entry, False)  # 设置为正常样式
+            else:
+                self.set_placeholder_style(self.include_entry, True)  # 设置为占位文本样式
             if "include_case_sensitive" in config:
                 self.include_case_sensitive_var.set(config["include_case_sensitive"])
-            if "exclude_keywords" in config:
+            if "exclude_keywords" in config and config["exclude_keywords"] and config["exclude_keywords"] != "keyword1 \"multiple words keywords\" keyword3":
                 self.exclude_var.set(config["exclude_keywords"])
+                self.set_placeholder_style(self.exclude_entry, False)  # 设置为正常样式
+            else:
+                self.set_placeholder_style(self.exclude_entry, True)  # 设置为占位文本样式
             if "exclude_case_sensitive" in config:
                 self.exclude_case_sensitive_var.set(config["exclude_case_sensitive"])
-            if "start_time" in config:
+            if "start_time" in config and config["start_time"] and config["start_time"] != "2023-01-01 00:00:00":
                 self.start_time_var.set(config["start_time"])
-            if "end_time" in config:
+                self.set_placeholder_style(self.start_time_entry, False)  # 设置为正常样式
+            else:
+                self.set_placeholder_style(self.start_time_entry, True)  # 设置为占位文本样式
+            if "end_time" in config and config["end_time"] and config["end_time"] != "2023-12-31 23:59:59":
                 self.end_time_var.set(config["end_time"])
+                self.set_placeholder_style(self.end_time_entry, False)  # 设置为正常样式
+            else:
+                self.set_placeholder_style(self.end_time_entry, True)  # 设置为占位文本样式
             
             # 如果有上次打开的文件，自动打开它
             if "current_file" in config and config["current_file"] and os.path.exists(config["current_file"]):
@@ -368,6 +438,52 @@ class LogInsight:
             self.status_var.set("已加载上次的配置")
         except Exception as e:
             self.status_var.set(f"加载配置失败: {str(e)}")
+    
+    def set_placeholder_style(self, entry: ttk.Entry, is_placeholder: bool) -> None:
+        """设置占位文本的样式
+        
+        Args:
+            entry: 输入框对象
+            is_placeholder: 是否是占位文本
+        """
+        style = ttk.Style()
+        if is_placeholder:
+            # 设置为灰色斜体
+            style.configure("Placeholder.TEntry", foreground="gray", font=("", 9, "italic"))
+            entry.configure(style="Placeholder.TEntry")
+        else:
+            # 恢复正常样式
+            style.configure("TEntry", foreground="black", font=("", 9, "normal"))
+            entry.configure(style="TEntry")
+    
+    def clear_placeholder(self, event: tk.Event, entry: ttk.Entry, var: tk.StringVar) -> None:
+        """当输入框获得焦点时清除占位文本
+        
+        Args:
+            event: 事件对象
+            entry: 输入框对象
+            var: 输入框关联的变量
+        """
+        current_value = var.get()
+        if not current_value or current_value in ["keyword1 \"multiple words keywords\" keyword3", "2023-01-01 00:00:00", "2023-12-31 23:59:59"]:
+            var.set("")
+            # 恢复正常样式
+            self.set_placeholder_style(entry, False)
+            
+    def restore_placeholder(self, event: tk.Event, entry: ttk.Entry, var: tk.StringVar, placeholder: str) -> None:
+        """当输入框失去焦点且为空时恢复占位文本
+        
+        Args:
+            event: 事件对象
+            entry: 输入框对象
+            var: 输入框关联的变量
+            placeholder: 占位文本
+        """
+        current_value = var.get().strip()
+        if not current_value:
+            var.set(placeholder)
+            # 设置为占位文本样式（灰色斜体）
+            self.set_placeholder_style(entry, True)
     
     def on_closing(self) -> None:
         """窗口关闭时的处理"""
