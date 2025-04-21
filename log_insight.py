@@ -106,9 +106,6 @@ class LogInsight:
         self.search_button: ttk.Button = ttk.Button(self.button_frame, text="过滤日志", command=self.search_log)
         self.search_button.pack(side=tk.LEFT, padx=5)
         
-        self.clear_button: ttk.Button = ttk.Button(self.button_frame, text="清除结果", command=self.clear_results)
-        self.clear_button.pack(side=tk.LEFT, padx=5)
-        
         # 结果显示区域
         self.result_frame: ttk.LabelFrame = ttk.LabelFrame(self.main_frame, text="搜索结果")
         self.result_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
