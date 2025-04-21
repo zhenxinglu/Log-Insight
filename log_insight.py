@@ -19,13 +19,6 @@ class LogInsight:
         # 绑定窗口关闭事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # 创建菜单栏
-        self.menu_bar: tk.Menu = tk.Menu(root)
-        self.file_menu: tk.Menu = tk.Menu(self.menu_bar, tearoff=0)
-        self.file_menu.add_command(label="打开日志文件", command=self.open_log_file)
-        self.menu_bar.add_cascade(label="文件", menu=self.file_menu)
-        root.config(menu=self.menu_bar)
-        
         # 创建主框架
         self.main_frame: ttk.Frame = ttk.Frame(root)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -86,7 +79,7 @@ class LogInsight:
         self.open_button: ttk.Button = ttk.Button(self.button_frame, text="打开日志文件", command=self.open_log_file)
         self.open_button.pack(side=tk.RIGHT, padx=5)
         
-        self.search_button: ttk.Button = ttk.Button(self.button_frame, text="搜索日志文件", command=self.search_log)
+        self.search_button: ttk.Button = ttk.Button(self.button_frame, text="过滤日志", command=self.search_log)
         self.search_button.pack(side=tk.LEFT, padx=5)
         
         self.clear_button: ttk.Button = ttk.Button(self.button_frame, text="清除结果", command=self.clear_results)
@@ -157,8 +150,14 @@ class LogInsight:
             messagebox.showwarning("警告", "请先打开日志文件")
             return
         
-        include_terms: List[str] = [term.strip() for term in self.include_var.get().split(',') if term.strip()]
-        exclude_terms: List[str] = [term.strip() for term in self.exclude_var.get().split(',') if term.strip()]
+        # 解析包含关键字（使用空格分隔，支持引号包含空格的关键字）
+        include_input: str = self.include_var.get().strip()
+        include_terms: List[str] = self.parse_keywords(include_input)
+        
+        # 解析排除关键字（使用空格分隔，支持引号包含空格的关键字）
+        exclude_input: str = self.exclude_var.get().strip()
+        exclude_terms: List[str] = self.parse_keywords(exclude_input)
+        
         start_time: str = self.start_time_var.get().strip()
         end_time: str = self.end_time_var.get().strip()
         
@@ -213,12 +212,12 @@ class LogInsight:
         match_count: int = 0
         for line in self.log_content:
             
-            # 检查是否包含所有包含关键字
-            if include_patterns and not all(pattern.search(line) for pattern in include_patterns):
+            # 检查是否包含任何排除关键字（优先级高）
+            if exclude_patterns and any(pattern.search(line) for pattern in exclude_patterns):
                 continue
             
-            # 检查是否包含任何排除关键字
-            if exclude_patterns and any(pattern.search(line) for pattern in exclude_patterns):
+            # 检查是否包含至少一个包含关键字
+            if include_patterns and not any(pattern.search(line) for pattern in include_patterns):
                 continue
             
             # 时间过滤
@@ -276,6 +275,33 @@ class LogInsight:
         all_text: str = self.result_text.get(1.0, tk.END)
         pyperclip.copy(all_text)
         self.status_var.set("已复制全部内容到剪贴板")
+        
+    def parse_keywords(self, input_str: str) -> List[str]:
+        """解析关键字，支持空格分隔和引号包含空格的关键字
+        
+        Args:
+            input_str: 输入的关键字字符串
+            
+        Returns:
+            解析后的关键字列表
+        """
+        if not input_str:
+            return []
+            
+        keywords: List[str] = []
+        # 正则表达式匹配：引号内的内容作为一个关键字，或者非空格字符序列作为关键字
+        pattern: Pattern = re.compile(r'"([^"]*)"|\S+')
+        
+        matches = pattern.finditer(input_str)
+        for match in matches:
+            # 如果是引号内的内容，group(1)会有值
+            if match.group(1) is not None:
+                keywords.append(match.group(1))
+            else:
+                # 否则使用完整匹配
+                keywords.append(match.group(0))
+                
+        return [keyword.strip() for keyword in keywords if keyword.strip()]
 
     def save_config(self) -> None:
         """保存当前配置到配置文件"""

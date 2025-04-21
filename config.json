@@ -1,8 +1,8 @@
 {
-    "current_file": "D:/tmp/BNCT-TCS_log_launcher.log",
-    "include_keywords": "",
-    "include_case_sensitive": true,
-    "exclude_keywords": "",
+    "current_file": "D:/codes/cnnckp_tcs/base/starter/BNCT-TCS_log_launcher.log",
+    "include_keywords": "kriss1 tcp",
+    "include_case_sensitive": false,
+    "exclude_keywords": ".configuration.  \"Bean naM\"",
     "exclude_case_sensitive": false,
     "start_time": "",
     "end_time": ""
