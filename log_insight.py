@@ -78,9 +78,9 @@ class LogInsight:
         self.start_time_entry: ttk.Entry = ttk.Entry(self.time_frame, textvariable=self.start_time_var, width=20)
         self.start_time_entry.pack(side=tk.LEFT, padx=5)
         # 添加占位文本
-        self.start_time_entry.insert(0, "2023-01-01 00:00:00")
+        self.start_time_entry.insert(0, "00:00:00.000")
         self.start_time_entry.bind("<FocusIn>", lambda event: self.clear_placeholder(event, self.start_time_entry, self.start_time_var))
-        self.start_time_entry.bind("<FocusOut>", lambda event: self.restore_placeholder(event, self.start_time_entry, self.start_time_var, "2023-01-01 00:00:00"))
+        self.start_time_entry.bind("<FocusOut>", lambda event: self.restore_placeholder(event, self.start_time_entry, self.start_time_var, "00:00:00.000"))
         # 设置占位文本样式
         self.set_placeholder_style(self.start_time_entry, True)
         
@@ -90,9 +90,9 @@ class LogInsight:
         self.end_time_entry: ttk.Entry = ttk.Entry(self.time_frame, textvariable=self.end_time_var, width=20)
         self.end_time_entry.pack(side=tk.LEFT, padx=5)
         # 添加占位文本
-        self.end_time_entry.insert(0, "2023-12-31 23:59:59")
+        self.end_time_entry.insert(0, "23:59:59.999")
         self.end_time_entry.bind("<FocusIn>", lambda event: self.clear_placeholder(event, self.end_time_entry, self.end_time_var))
-        self.end_time_entry.bind("<FocusOut>", lambda event: self.restore_placeholder(event, self.end_time_entry, self.end_time_var, "2023-12-31 23:59:59"))
+        self.end_time_entry.bind("<FocusOut>", lambda event: self.restore_placeholder(event, self.end_time_entry, self.end_time_var, "23:59:59.999"))
         # 设置占位文本样式
         self.set_placeholder_style(self.end_time_entry, True)
         
@@ -173,36 +173,29 @@ class LogInsight:
         if not self.log_content:
             messagebox.showwarning("警告", "请先打开日志文件")
             return
-        
         # 解析包含关键字（使用空格分隔，支持引号包含空格的关键字）
         include_input: str = self.include_var.get().strip()
         # 检查是否是占位文本
         if include_input == "keyword1 \"multiple words keywords\" keyword3":
             include_input = ""
         include_terms: List[str] = self.parse_keywords(include_input)
-        
         # 解析排除关键字（使用空格分隔，支持引号包含空格的关键字）
         exclude_input: str = self.exclude_var.get().strip()
         # 检查是否是占位文本
         if exclude_input == "keyword1 \"multiple words keywords\" keyword3":
             exclude_input = ""
         exclude_terms: List[str] = self.parse_keywords(exclude_input)
-        
         start_time: str = self.start_time_var.get().strip()
         # 检查是否是占位文本
-        if start_time == "2023-01-01 00:00:00":
+        if start_time == "00:00:00.000":
             start_time = ""
-            
         end_time: str = self.end_time_var.get().strip()
         # 检查是否是占位文本
-        if end_time == "2023-12-31 23:59:59":
+        if end_time == "23:59:59.999":
             end_time = ""
-        
         # 保存当前搜索条件
         self.save_config()
-        
         self.clear_results()
-        
         # 根据大小写敏感设置编译正则表达式
         include_case_sensitive: bool = self.include_case_sensitive_var.get()
         exclude_case_sensitive: bool = self.exclude_case_sensitive_var.get()
@@ -226,7 +219,7 @@ class LogInsight:
                 exclude_patterns.append(re.compile(escaped_term, re.IGNORECASE))
         
         # 时间格式检查
-        time_format: str = "%Y-%m-%d %H:%M:%S"
+        time_format: str = "%H:%M:%S.%f"
         use_time_filter: bool = False
         start_datetime: Optional[datetime] = None
         end_datetime: Optional[datetime] = None
@@ -247,8 +240,8 @@ class LogInsight:
                 messagebox.showwarning("警告", f"结束时间格式无效，请使用格式: {time_format}")
                 return
         
-        # 时间正则表达式
-        time_pattern: Pattern = re.compile(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})')
+        # 时间正则表达式 (匹配行首 HH:MM:SS.XXX)
+        time_pattern: Pattern = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d{3})')
         
         match_count: int = 0
         for line in self.log_content:
@@ -484,6 +477,29 @@ class LogInsight:
             var.set(placeholder)
             # 设置为占位文本样式（灰色斜体）
             self.set_placeholder_style(entry, True)
+    
+    def extract_time(self, line: str) -> Optional[str]:
+        # 匹配格式为 HH:mm:ss.XXX 的时间
+        match = re.search(r"(\d{2}:\d{2}:\d{2}\.\d{3})", line)
+        if match:
+            return match.group(1)
+        return None
+    
+    def time_in_range(self, time_str: str, start: str, end: str) -> bool:
+        # 只比较 HH:mm:ss.XXX
+        try:
+            time_obj = datetime.strptime(time_str, "%H:%M:%S.%f")
+            if start:
+                start_obj = datetime.strptime(start, "%H:%M:%S.%f")
+                if time_obj < start_obj:
+                    return False
+            if end:
+                end_obj = datetime.strptime(end, "%H:%M:%S.%f")
+                if time_obj > end_obj:
+                    return False
+            return True
+        except Exception:
+            return False
     
     def on_closing(self) -> None:
         """窗口关闭时的处理"""
