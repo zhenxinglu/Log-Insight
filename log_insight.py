@@ -19,6 +19,8 @@ class LogInsight:
         self.root = root
         self.root.title("LogInsight")
         self.root.geometry("1000x600")
+        # 设置窗口最大化
+        self.root.state("zoomed")
         
         # 绑定窗口关闭事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -41,7 +43,7 @@ class LogInsight:
         # 包含关键字
         ttk.Label(self.filter_frame, text="包含关键字:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
         self.include_var: tk.StringVar = tk.StringVar()
-        self.include_entry: ttk.Entry = ttk.Entry(self.filter_frame, textvariable=self.include_var, width=80)
+        self.include_entry: ttk.Entry = ttk.Entry(self.filter_frame, textvariable=self.include_var, width=100)
         self.include_entry.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
         # 添加占位文本
         self.include_entry.insert(0, "keyword1 \"multiple words keywords\" keyword3")
@@ -60,8 +62,7 @@ class LogInsight:
         # 加载SVG图标
         self.case_icons: Dict[str, Tuple[ImageTk.PhotoImage, ImageTk.PhotoImage]] = self.load_case_icons()
         
-        # 创建标签
-        ttk.Label(self.include_case_frame, text="大小写敏感:").pack(side=tk.LEFT, padx=(0, 5))
+        # 不显示"大小写敏感"文本标签
         
         # 创建图标按钮
         self.include_case_btn: ttk.Label = ttk.Label(self.include_case_frame, cursor="hand2")
@@ -76,7 +77,7 @@ class LogInsight:
         # 排除关键字
         ttk.Label(self.filter_frame, text="排除关键字:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
         self.exclude_var: tk.StringVar = tk.StringVar()
-        self.exclude_entry: ttk.Entry = ttk.Entry(self.filter_frame, textvariable=self.exclude_var, width=80)
+        self.exclude_entry: ttk.Entry = ttk.Entry(self.filter_frame, textvariable=self.exclude_var, width=100)
         self.exclude_entry.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
         # 添加占位文本
         self.exclude_entry.insert(0, "keyword1 \"multiple words keywords\" keyword3")
@@ -92,8 +93,7 @@ class LogInsight:
         self.exclude_case_frame: ttk.Frame = ttk.Frame(self.filter_frame)
         self.exclude_case_frame.grid(row=1, column=2, sticky=tk.W, padx=5, pady=5)
         
-        # 创建标签
-        ttk.Label(self.exclude_case_frame, text="大小写敏感:").pack(side=tk.LEFT, padx=(0, 5))
+        # 不显示"大小写敏感"文本标签
         
         # 创建图标按钮
         self.exclude_case_btn: tk.Label = ttk.Label(self.exclude_case_frame, cursor="hand2")
