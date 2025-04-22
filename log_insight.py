@@ -6,6 +6,8 @@ import pyperclip
 import os
 import json
 from typing import List, Pattern, Optional, Any, Dict
+import time
+from threading import Thread, Event
 
 class LogInsight:
     # 配置文件路径
@@ -106,6 +108,16 @@ class LogInsight:
         self.search_button: ttk.Button = ttk.Button(self.button_frame, text="过滤日志", command=self.search_log)
         self.search_button.pack(side=tk.LEFT, padx=5)
         
+        # Tail Log 复选框
+        self.tail_log_var: tk.BooleanVar = tk.BooleanVar(value=False)
+        self.tail_log_check: ttk.Checkbutton = ttk.Checkbutton(
+            self.button_frame,
+            text="Tail Log",
+            variable=self.tail_log_var,
+            command=self.toggle_tail_log
+        )
+        self.tail_log_check.pack(side=tk.LEFT, padx=5)
+        
         # 结果显示区域
         self.result_frame: ttk.LabelFrame = ttk.LabelFrame(self.main_frame, text="搜索结果")
         self.result_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -135,6 +147,9 @@ class LogInsight:
         # 初始化变量
         self.log_content: List[str] = []
         self.current_file: Optional[str] = None
+        self.last_file_size: int = 0
+        self.tail_stop_event: Event = Event()
+        self.tail_thread: Optional[Thread] = None
         
         # 加载上次的配置
         self.load_config()
@@ -498,8 +513,163 @@ class LogInsight:
         except Exception:
             return False
     
+    def toggle_tail_log(self) -> None:
+        """切换Tail Log状态"""
+        if not self.current_file:
+            messagebox.showwarning("警告", "请先打开日志文件")
+            self.tail_log_var.set(False)
+            return
+            
+        if self.tail_log_var.get():
+            # 启动文件监控
+            self.tail_stop_event.clear()
+            self.tail_thread = Thread(target=self.monitor_file, daemon=True)
+            self.tail_thread.start()
+            self.status_var.set("Tail Log 已启动")
+        else:
+            # 停止文件监控
+            if self.tail_thread and self.tail_thread.is_alive():
+                self.tail_stop_event.set()
+                self.tail_thread.join()
+            self.status_var.set("Tail Log 已停止")
+    
+    def monitor_file(self) -> None:
+        """监控文件变化"""
+        try:
+            self.last_file_size = os.path.getsize(self.current_file)
+            
+            while not self.tail_stop_event.is_set():
+                try:
+                    current_size = os.path.getsize(self.current_file)
+                    
+                    if current_size > self.last_file_size:
+                        # 读取新增的内容
+                        with open(self.current_file, 'r', encoding='utf-8', errors='ignore') as file:
+                            file.seek(self.last_file_size)
+                            new_content = file.readlines()
+                            
+                        # 在主线程中更新UI
+                        self.root.after(0, self.update_content, new_content)
+                        self.last_file_size = current_size
+                    
+                    time.sleep(1)  # 每秒检查一次文件变化
+                    
+                except FileNotFoundError:
+                    self.root.after(0, self.handle_file_error, "文件已被删除或移动")
+                    break
+                except PermissionError:
+                    self.root.after(0, self.handle_file_error, "无法访问文件")
+                    break
+                except Exception as e:
+                    self.root.after(0, self.handle_file_error, f"监控文件时出错: {str(e)}")
+                    break
+                    
+        except Exception as e:
+            self.root.after(0, self.handle_file_error, f"启动文件监控时出错: {str(e)}")
+    
+    def update_content(self, new_content: List[str]) -> None:
+        """更新显示内容"""
+        # 应用当前的过滤条件
+        for line in new_content:
+            # 检查是否包含任何排除关键字（优先级高）
+            if any(pattern.search(line) for pattern in self.get_exclude_patterns()):
+                continue
+            
+            # 检查是否包含至少一个包含关键字
+            include_patterns = self.get_include_patterns()
+            if include_patterns and not any(pattern.search(line) for pattern in include_patterns):
+                continue
+            
+            # 检查时间范围
+            if not self.check_time_range(line):
+                continue
+            
+            # 添加匹配的行
+            self.result_text.insert(tk.END, line)
+            self.result_text.see(tk.END)  # 滚动到最新内容
+    
+    def get_include_patterns(self) -> List[Pattern]:
+        """获取包含关键字的正则表达式模式"""
+        include_input = self.include_var.get().strip()
+        if include_input == "keyword1 \"multiple words keywords\" keyword3":
+            return []
+        
+        include_terms = self.parse_keywords(include_input)
+        include_case_sensitive = self.include_case_sensitive_var.get()
+        
+        patterns = []
+        for term in include_terms:
+            escaped_term = re.escape(term)
+            if include_case_sensitive:
+                patterns.append(re.compile(escaped_term))
+            else:
+                patterns.append(re.compile(escaped_term, re.IGNORECASE))
+        return patterns
+    
+    def get_exclude_patterns(self) -> List[Pattern]:
+        """获取排除关键字的正则表达式模式"""
+        exclude_input = self.exclude_var.get().strip()
+        if exclude_input == "keyword1 \"multiple words keywords\" keyword3":
+            return []
+        
+        exclude_terms = self.parse_keywords(exclude_input)
+        exclude_case_sensitive = self.exclude_case_sensitive_var.get()
+        
+        patterns = []
+        for term in exclude_terms:
+            escaped_term = re.escape(term)
+            if exclude_case_sensitive:
+                patterns.append(re.compile(escaped_term))
+            else:
+                patterns.append(re.compile(escaped_term, re.IGNORECASE))
+        return patterns
+    
+    def check_time_range(self, line: str) -> bool:
+        """检查行是否在指定的时间范围内"""
+        start_time = self.start_time_var.get().strip()
+        if start_time == "00:00:00.000":
+            start_time = ""
+            
+        end_time = self.end_time_var.get().strip()
+        if end_time == "23:59:59.999":
+            end_time = ""
+        
+        if not (start_time or end_time):
+            return True
+        
+        time_match = re.search(r'^(\d{2}:\d{2}:\d{2}\.\d{3})', line)
+        if not time_match:
+            return False
+            
+        try:
+            line_time = datetime.strptime(time_match.group(1), "%H:%M:%S.%f")
+            
+            if start_time:
+                start_datetime = datetime.strptime(start_time, "%H:%M:%S.%f")
+                if line_time < start_datetime:
+                    return False
+                    
+            if end_time:
+                end_datetime = datetime.strptime(end_time, "%H:%M:%S.%f")
+                if line_time > end_datetime:
+                    return False
+                    
+            return True
+        except ValueError:
+            return False
+    
+    def handle_file_error(self, error_message: str) -> None:
+        """处理文件监控错误"""
+        self.tail_log_var.set(False)
+        self.status_var.set(error_message)
+        messagebox.showerror("错误", error_message)
+    
     def on_closing(self) -> None:
         """窗口关闭时的处理"""
+        # 停止文件监控
+        self.tail_log_var.set(False)
+        self.toggle_tail_log()
+        
         # 保存当前配置
         self.save_config()
         # 关闭窗口
