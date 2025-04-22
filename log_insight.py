@@ -5,9 +5,11 @@ from datetime import datetime
 import pyperclip
 import os
 import json
-from typing import List, Pattern, Optional, Any, Dict
+from typing import List, Pattern, Optional, Any, Dict, Tuple, Union
 import time
 from threading import Thread, Event
+from PIL import Image, ImageTk, ImageDraw
+import io
 
 class LogInsight:
     # 配置文件路径
@@ -48,10 +50,28 @@ class LogInsight:
         # 设置占位文本样式
         self.set_placeholder_style(self.include_entry, True)
         
-        # 包含关键字大小写敏感开关
+        # 包含关键字大小写敏感开关 - SVG图标按钮
         self.include_case_sensitive_var: tk.BooleanVar = tk.BooleanVar(value=False)
-        self.include_case_sensitive_check: ttk.Checkbutton = ttk.Checkbutton(self.filter_frame, text="大小写敏感", variable=self.include_case_sensitive_var)
-        self.include_case_sensitive_check.grid(row=0, column=2, sticky=tk.W, padx=5, pady=5)
+        
+        # 创建图标按钮框架
+        self.include_case_frame: ttk.Frame = ttk.Frame(self.filter_frame)
+        self.include_case_frame.grid(row=0, column=2, sticky=tk.W, padx=5, pady=5)
+        
+        # 加载SVG图标
+        self.case_icons: Dict[str, Tuple[ImageTk.PhotoImage, ImageTk.PhotoImage]] = self.load_case_icons()
+        
+        # 创建标签
+        ttk.Label(self.include_case_frame, text="大小写敏感:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 创建图标按钮
+        self.include_case_btn: ttk.Label = ttk.Label(self.include_case_frame, cursor="hand2")
+        self.include_case_btn.pack(side=tk.LEFT)
+        
+        # 设置初始图标
+        self.update_case_icon(self.include_case_btn, self.include_case_sensitive_var.get())
+        
+        # 绑定点击事件
+        self.include_case_btn.bind("<Button-1>", lambda event: self.toggle_case_sensitivity(event, self.include_case_sensitive_var, self.include_case_btn))
         
         # 排除关键字
         ttk.Label(self.filter_frame, text="排除关键字:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
@@ -65,10 +85,25 @@ class LogInsight:
         # 设置占位文本样式
         self.set_placeholder_style(self.exclude_entry, True)
         
-        # 排除关键字大小写敏感开关
+        # 排除关键字大小写敏感开关 - SVG图标按钮
         self.exclude_case_sensitive_var: tk.BooleanVar = tk.BooleanVar(value=False)
-        self.exclude_case_sensitive_check: ttk.Checkbutton = ttk.Checkbutton(self.filter_frame, text="大小写敏感", variable=self.exclude_case_sensitive_var)
-        self.exclude_case_sensitive_check.grid(row=1, column=2, sticky=tk.W, padx=5, pady=5)
+        
+        # 创建图标按钮框架
+        self.exclude_case_frame: ttk.Frame = ttk.Frame(self.filter_frame)
+        self.exclude_case_frame.grid(row=1, column=2, sticky=tk.W, padx=5, pady=5)
+        
+        # 创建标签
+        ttk.Label(self.exclude_case_frame, text="大小写敏感:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 创建图标按钮
+        self.exclude_case_btn: tk.Label = ttk.Label(self.exclude_case_frame, cursor="hand2")
+        self.exclude_case_btn.pack(side=tk.LEFT)
+        
+        # 设置初始图标
+        self.update_case_icon(self.exclude_case_btn, self.exclude_case_sensitive_var.get())
+        
+        # 绑定点击事件
+        self.exclude_case_btn.bind("<Button-1>", lambda event: self.toggle_case_sensitivity(event, self.exclude_case_sensitive_var, self.exclude_case_btn))
         
         # 时间范围
         ttk.Label(self.filter_frame, text="时间范围:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
@@ -460,6 +495,94 @@ class LogInsight:
             # 恢复正常样式
             style.configure("TEntry", foreground="black", font=("", 9, "normal"))
             entry.configure(style="TEntry")
+    
+    def load_case_icons(self) -> Dict[str, Tuple[ImageTk.PhotoImage, ImageTk.PhotoImage]]:
+        """加载大小写敏感图标
+        
+        Returns:
+            包含图标的字典
+        """
+        icons = {}
+        
+        # 定义图标的标准大小 - 增加图标尺寸以便更容易看到
+        icon_size = (24, 24)  # 从16x16增加到24x24
+        
+        try:
+            # 从文件系统加载JPG图像
+            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "case_sensitive_icon.jpg")
+            if os.path.exists(icon_path):
+                # 加载图像
+                img = Image.open(icon_path)
+                
+                # 调整图像大小到标准尺寸
+                img = img.resize(icon_size, Image.LANCZOS)
+                
+                # 创建两个图标 - 一个用于关闭状态，一个用于激活状态
+                # 为了区分状态，我们可以调整亮度或颜色
+                img_off = img.copy()
+                img_on = img.copy().convert('RGBA')
+                
+                # 为激活状态添加更深的蓝色色调，增加透明度以提高对比度
+                overlay = Image.new('RGBA', img_on.size, (0, 80, 180, 120))  # 更深的蓝色，更高的透明度
+                img_on = Image.alpha_composite(img_on, overlay)
+                
+                # 转换为PhotoImage
+                off_image = ImageTk.PhotoImage(img_off)
+                on_image = ImageTk.PhotoImage(img_on)
+                
+                icons["case"] = (off_image, on_image)
+            else:
+                raise FileNotFoundError(f"图标文件不存在: {icon_path}")
+            
+        except Exception as e:
+            print(f"加载图标失败: {str(e)}")
+            # 创建一个空白图标作为最后的备用
+            try:
+                # 尝试使用PIL创建空白图标
+                img_off = Image.new('RGBA', icon_size, (240, 240, 240, 0))
+                img_on = Image.new('RGBA', icon_size, (240, 240, 240, 0))
+                
+                # 在空白图标上添加简单文本
+                draw_off = ImageDraw.Draw(img_off)
+                draw_on = ImageDraw.Draw(img_on)
+                
+                # 调整文本位置以适应较大的图标，并增加字体大小
+                draw_off.text((5, 5), "aa", fill=(100, 100, 100))
+                draw_on.text((5, 5), "Aa", fill=(0, 80, 180))  # 使用更深的蓝色
+                
+                icons["case"] = (ImageTk.PhotoImage(img_off), ImageTk.PhotoImage(img_on))
+            except Exception:
+                # 如果PIL也失败，使用最基本的tkinter图标
+                blank = tk.PhotoImage(width=icon_size[0], height=icon_size[1])
+                icons["case"] = (blank, blank)
+        
+        return icons
+    
+    
+    def update_case_icon(self, label: Union[tk.Label, ttk.Label], is_active: bool) -> None:
+        """更新大小写敏感图标
+        
+        Args:
+            label: 标签对象
+            is_active: 是否激活
+        """
+        if is_active:
+            label.configure(image=self.case_icons["case"][1])
+        else:
+            label.configure(image=self.case_icons["case"][0])
+    
+    def toggle_case_sensitivity(self, event: tk.Event, var: tk.BooleanVar, label: tk.Label) -> None:
+        """切换大小写敏感状态
+        
+        Args:
+            event: 事件对象
+            var: 布尔变量
+            label: 标签对象
+        """
+        # 切换状态
+        var.set(not var.get())
+        # 更新图标
+        self.update_case_icon(label, var.get())
     
     def clear_placeholder(self, event: tk.Event, entry: ttk.Entry, var: tk.StringVar) -> None:
         """当输入框获得焦点时清除占位文本
