@@ -71,8 +71,8 @@ class LogInsight:
         # 设置初始图标
         self.update_case_icon(self.include_case_btn, self.include_case_sensitive_var.get())
         
-        # 绑定点击事件
-        self.include_case_btn.bind("<Button-1>", lambda event: self.toggle_case_sensitivity(event, self.include_case_sensitive_var, self.include_case_btn))
+        # 绑定点击事件 - 使用after方法确保事件处理在UI线程中完成
+        self.include_case_btn.bind("<Button-1>", lambda event: self.root.after(10, lambda: self.toggle_case_sensitivity(event, self.include_case_sensitive_var, self.include_case_btn)))
         
         # 排除关键字
         ttk.Label(self.filter_frame, text="排除关键字:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
@@ -102,8 +102,8 @@ class LogInsight:
         # 设置初始图标
         self.update_case_icon(self.exclude_case_btn, self.exclude_case_sensitive_var.get())
         
-        # 绑定点击事件
-        self.exclude_case_btn.bind("<Button-1>", lambda event: self.toggle_case_sensitivity(event, self.exclude_case_sensitive_var, self.exclude_case_btn))
+        # 绑定点击事件 - 使用after方法确保事件处理在UI线程中完成
+        self.exclude_case_btn.bind("<Button-1>", lambda event: self.root.after(10, lambda: self.toggle_case_sensitivity(event, self.exclude_case_sensitive_var, self.exclude_case_btn)))
         
         # 时间范围
         ttk.Label(self.filter_frame, text="时间范围:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
@@ -438,6 +438,8 @@ class LogInsight:
                 self.set_placeholder_style(self.include_entry, True)  # 设置为占位文本样式
             if "include_case_sensitive" in config:
                 self.include_case_sensitive_var.set(config["include_case_sensitive"])
+                # 更新包含关键字大小写敏感图标状态
+                self.update_case_icon(self.include_case_btn, self.include_case_sensitive_var.get())
             if "exclude_keywords" in config and config["exclude_keywords"] and config["exclude_keywords"] != "keyword1 \"multiple words keywords\" keyword3":
                 self.exclude_var.set(config["exclude_keywords"])
                 self.set_placeholder_style(self.exclude_entry, False)  # 设置为正常样式
@@ -445,6 +447,8 @@ class LogInsight:
                 self.set_placeholder_style(self.exclude_entry, True)  # 设置为占位文本样式
             if "exclude_case_sensitive" in config:
                 self.exclude_case_sensitive_var.set(config["exclude_case_sensitive"])
+                # 更新排除关键字大小写敏感图标状态
+                self.update_case_icon(self.exclude_case_btn, self.exclude_case_sensitive_var.get())
             if "start_time" in config and config["start_time"] and config["start_time"] != "2023-01-01 00:00:00":
                 self.start_time_var.set(config["start_time"])
                 self.set_placeholder_style(self.start_time_entry, False)  # 设置为正常样式
@@ -571,7 +575,7 @@ class LogInsight:
         else:
             label.configure(image=self.case_icons["case"][0])
     
-    def toggle_case_sensitivity(self, event: tk.Event, var: tk.BooleanVar, label: tk.Label) -> None:
+    def toggle_case_sensitivity(self, event: tk.Event, var: tk.BooleanVar, label: Union[tk.Label, ttk.Label]) -> None:
         """切换大小写敏感状态
         
         Args:
@@ -579,10 +583,37 @@ class LogInsight:
             var: 布尔变量
             label: 标签对象
         """
-        # 切换状态
-        var.set(not var.get())
-        # 更新图标
-        self.update_case_icon(label, var.get())
+        try:
+            print(f"Toggle case sensitivity: {label}, {event}")
+            # 获取当前值并切换状态
+            current_value = var.get()
+            new_value = not current_value
+            var.set(new_value)
+            
+            # 确保图标更新
+            if isinstance(label, ttk.Label):
+                # 对于ttk.Label，需要特别处理
+                if new_value:
+                    label.configure(image=self.case_icons["case"][1])
+                else:
+                    label.configure(image=self.case_icons["case"][0])
+            else:
+                # 使用通用方法更新图标
+                self.update_case_icon(label, new_value)
+            
+            # 强制更新UI
+            label.update()
+            self.root.update_idletasks()
+            
+            # 更新状态栏提示
+            self.status_var.set(f"大小写敏感: {'开启' if new_value else '关闭'}")
+            
+            # 打印调试信息
+            print(f"Toggle case sensitivity: {current_value} -> {new_value}, Widget: {label}")
+        except Exception as e:
+            print(f"Error in toggle_case_sensitivity: {str(e)}")
+            # 确保异常不会影响用户体验
+            self.status_var.set(f"切换大小写敏感状态时出错: {str(e)}")
     
     def clear_placeholder(self, event: tk.Event, entry: ttk.Entry, var: tk.StringVar) -> None:
         """当输入框获得焦点时清除占位文本
