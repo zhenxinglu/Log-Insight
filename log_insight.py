@@ -153,6 +153,16 @@ class LogInsight:
         )
         self.tail_log_check.pack(side=tk.LEFT, padx=5)
         
+        # Word Wrap 复选框
+        self.word_wrap_var: tk.BooleanVar = tk.BooleanVar(value=True)
+        self.word_wrap_check: ttk.Checkbutton = ttk.Checkbutton(
+            self.button_frame,
+            text="Word Wrap",
+            variable=self.word_wrap_var,
+            command=self.toggle_word_wrap
+        )
+        self.word_wrap_check.pack(side=tk.LEFT, padx=5)
+        
         # 结果显示区域
         self.result_frame: ttk.LabelFrame = ttk.LabelFrame(self.main_frame, text="搜索结果")
         self.result_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -442,7 +452,8 @@ class LogInsight:
             "exclude_case_sensitive": self.exclude_case_sensitive_var.get(),
             "start_time": start_time,
             "end_time": end_time,
-            "font_size": self.current_font_size
+            "font_size": self.current_font_size,
+            "word_wrap": self.word_wrap_var.get()
         }
         
         try:
@@ -496,6 +507,11 @@ class LogInsight:
             if "font_size" in config and isinstance(config["font_size"], int):
                 self.current_font_size = config["font_size"]
                 self.result_text.configure(font=("TkDefaultFont", self.current_font_size))
+                
+            # 加载Word Wrap设置
+            if "word_wrap" in config and isinstance(config["word_wrap"], bool):
+                self.word_wrap_var.set(config["word_wrap"])
+                self.toggle_word_wrap()
             
             # 如果有上次打开的文件，自动打开它
             if "current_file" in config and config["current_file"] and os.path.exists(config["current_file"]):
@@ -703,6 +719,21 @@ class LogInsight:
             return True
         except Exception:
             return False
+    
+    def toggle_word_wrap(self) -> None:
+        """切换Word Wrap状态
+        
+        根据复选框状态切换文本区域的自动换行属性
+        """
+        if self.word_wrap_var.get():
+            self.result_text.configure(wrap=tk.WORD)
+            self.status_var.set("Word Wrap: 已启用")
+        else:
+            self.result_text.configure(wrap=tk.NONE)
+            self.status_var.set("Word Wrap: 已禁用")
+        
+        # 保存当前配置
+        self.save_config()
     
     def toggle_tail_log(self) -> None:
         """切换Tail Log状态"""
