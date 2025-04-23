@@ -17,8 +17,8 @@ class LogInsight:
     
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("LogInsight")
-        self.root.geometry("1000x600")
+        self.root.title("Log Insight")
+        # self.root.geometry("1000x600")
         # 设置窗口最大化
         self.root.state("zoomed")
         
@@ -164,6 +164,13 @@ class LogInsight:
         self.scrollbar: ttk.Scrollbar = ttk.Scrollbar(self.result_frame, command=self.result_text.yview)
         self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.result_text.config(yscrollcommand=self.scrollbar.set)
+        
+        # 初始化字体大小
+        self.current_font_size: int = 10
+        self.result_text.configure(font=("TkDefaultFont", self.current_font_size))
+        
+        # 绑定Ctrl+鼠标滚轮事件用于缩放字体
+        self.result_text.bind("<Control-MouseWheel>", self.on_mouse_wheel)
         
         # 右键菜单
         self.context_menu: tk.Menu = tk.Menu(self.result_text, tearoff=0)
@@ -357,6 +364,30 @@ class LogInsight:
         pyperclip.copy(all_text)
         self.status_var.set("已复制全部内容到剪贴板")
         
+    def on_mouse_wheel(self, event: tk.Event) -> None:
+        """处理Ctrl+鼠标滚轮事件，调整字体大小
+        
+        Args:
+            event: 鼠标事件对象
+        """
+        # 在Windows上，event.delta为正表示向上滚动，为负表示向下滚动
+        # 向上滚动增大字体，向下滚动减小字体
+        if event.delta > 0:
+            # 增大字体
+            self.current_font_size = min(36, self.current_font_size + 1)  # 设置最大字体大小为36
+        else:
+            # 减小字体
+            self.current_font_size = max(6, self.current_font_size - 1)  # 设置最小字体大小为6
+        
+        # 更新文本框字体
+        self.result_text.configure(font=("TkDefaultFont", self.current_font_size))
+        
+        # 更新状态栏
+        self.status_var.set(f"字体大小: {self.current_font_size}")
+        
+        # 阻止事件继续传播（防止默认的滚动行为）
+        return "break"
+        
     def parse_keywords(self, input_str: str) -> List[str]:
         """解析关键字，支持空格分隔和引号包含空格的关键字
         
@@ -410,7 +441,8 @@ class LogInsight:
             "exclude_keywords": exclude_keywords,
             "exclude_case_sensitive": self.exclude_case_sensitive_var.get(),
             "start_time": start_time,
-            "end_time": end_time
+            "end_time": end_time,
+            "font_size": self.current_font_size
         }
         
         try:
@@ -459,6 +491,11 @@ class LogInsight:
                 self.set_placeholder_style(self.end_time_entry, False)  # 设置为正常样式
             else:
                 self.set_placeholder_style(self.end_time_entry, True)  # 设置为占位文本样式
+            
+            # 加载字体大小设置
+            if "font_size" in config and isinstance(config["font_size"], int):
+                self.current_font_size = config["font_size"]
+                self.result_text.configure(font=("TkDefaultFont", self.current_font_size))
             
             # 如果有上次打开的文件，自动打开它
             if "current_file" in config and config["current_file"] and os.path.exists(config["current_file"]):
