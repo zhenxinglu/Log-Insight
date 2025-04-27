@@ -14,8 +14,9 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QLabel, QLineEdit, QTextEdit, QScrollBar, QFrame, QGroupBox,
                              QPushButton, QCheckBox, QFileDialog, QMessageBox, QMenu,
                              QGridLayout, QSizePolicy)
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QEvent, QObject, QTimer
-from PyQt6.QtGui import QFont, QAction, QWheelEvent, QIcon, QPixmap, QImage, QContextMenuEvent
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QEvent, QObject, QTimer, QMimeData
+from PyQt6.QtGui import (QFont, QAction, QWheelEvent, QIcon, QPixmap, QImage, QContextMenuEvent,
+                         QDragEnterEvent, QDropEvent)
 
 
 class LogInsight(QMainWindow):
@@ -49,6 +50,9 @@ class LogInsight(QMainWindow):
         
         # 加载上次的配置
         self.load_config()
+        
+        # 启用拖放功能
+        self.setAcceptDrops(True)
     
     def setup_ui(self) -> None:
         # 创建过滤器框架
@@ -177,11 +181,16 @@ class LogInsight(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"无法打开文件: {str(e)}")
     
-    def search_log(self) -> None:
-        if not self.log_content:
-            QMessageBox.warning(self, "警告", "请先打开日志文件")
-            return
+    def filter_log_content(self, log_lines: List[str]) -> Tuple[str, int]:
+        """
+        根据过滤条件过滤日志内容
         
+        Args:
+            log_lines: 要过滤的日志行列表
+            
+        Returns:
+            过滤后的文本内容和匹配行数的元组
+        """
         # 解析包含关键字
         include_input: str = self.include_entry.text().strip()
         include_terms: List[str] = self.parse_keywords(include_input)
@@ -192,10 +201,6 @@ class LogInsight(QMainWindow):
         
         start_time: str = self.start_time_entry.text().strip()
         end_time: str = self.end_time_entry.text().strip()
-        
-        # 保存当前搜索条件
-        self.save_config()
-        self.clear_results()
         
         # 根据大小写敏感设置编译正则表达式
         include_case_sensitive: bool = self.include_case_sensitive.isChecked()
@@ -230,16 +235,14 @@ class LogInsight(QMainWindow):
                 start_datetime = datetime.strptime(start_time, time_format)
                 use_time_filter = True
             except ValueError:
-                QMessageBox.warning(self, "警告", f"开始时间格式无效，请使用格式: {time_format}")
-                return
+                return "开始时间格式无效，请使用格式: " + time_format, 0
         
         if end_time:
             try:
                 end_datetime = datetime.strptime(end_time, time_format)
                 use_time_filter = True
             except ValueError:
-                QMessageBox.warning(self, "警告", f"结束时间格式无效，请使用格式: {time_format}")
-                return
+                return "结束时间格式无效，请使用格式: " + time_format, 0
         
         # 时间正则表达式 (匹配行首 HH:MM:SS.XXX)
         time_pattern: Pattern = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d{3})')
@@ -247,7 +250,7 @@ class LogInsight(QMainWindow):
         match_count: int = 0
         result_text = ""
         
-        for line in self.log_content:
+        for line in log_lines:
             # 检查是否包含任何排除关键字（优先级高）
             if exclude_patterns and any(pattern.search(line) for pattern in exclude_patterns):
                 continue
@@ -279,6 +282,20 @@ class LogInsight(QMainWindow):
             # 添加匹配行到结果
             result_text += line
             match_count += 1
+        
+        return result_text, match_count
+    
+    def search_log(self) -> None:
+        if not self.log_content:
+            QMessageBox.warning(self, "警告", "请先打开日志文件")
+            return
+        
+        # 保存当前搜索条件
+        self.save_config()
+        self.clear_results()
+        
+        # 应用过滤条件
+        result_text, match_count = self.filter_log_content(self.log_content)
         
         if match_count == 0:
             self.result_text.setText("没有找到匹配的结果。\n")
@@ -454,6 +471,51 @@ class LogInsight(QMainWindow):
         except Exception as e:
             self.statusBar().showMessage(f"保存配置失败: {str(e)}")
     
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        """处理拖拽进入事件，接受文件拖放
+        
+        Args:
+            event: 拖拽进入事件对象
+        """
+        # 检查是否包含文件URL
+        if event.mimeData().hasUrls():
+            # 只接受文件URL
+            event.acceptProposedAction()
+    
+    def dropEvent(self, event: QDropEvent) -> None:
+        """处理拖放事件，打开拖放的文件
+        
+        Args:
+            event: 拖放事件对象
+        """
+        # 获取拖放的文件URL列表
+        urls = event.mimeData().urls()
+        
+        # 如果有文件被拖放
+        if urls:
+            # 获取第一个文件的本地路径（只处理第一个文件）
+            file_path = urls[0].toLocalFile()
+            
+            # 如果是有效的文件路径，则打开该文件
+            if file_path and os.path.isfile(file_path):
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
+                        self.log_content = file.readlines()
+                    
+                    self.current_file = file_path
+                    self.statusBar().showMessage(f"已加载文件: {os.path.basename(file_path)} - {len(self.log_content)} 行")
+                    self.clear_results()
+                    # 更新窗口标题显示文件路径
+                    self.setWindowTitle(f"LogInsight - {file_path}")
+                    
+                    # 在结果区域显示日志内容
+                    self.result_text.setText("".join(self.log_content))
+                    
+                    # 保存当前配置
+                    self.save_config()
+                except Exception as e:
+                    QMessageBox.critical(self, "错误", f"无法打开文件: {str(e)}")
+    
     def load_config(self) -> None:
         """从配置文件加载配置"""
         if not os.path.exists(self.CONFIG_FILE):
@@ -521,10 +583,25 @@ class TailLogEvent(QEvent):
 # 重写事件处理方法，处理自定义事件
 def event(self, event: QEvent) -> bool:
     if event.type() == TailLogEvent.EVENT_TYPE:
-        # 追加新内容到结果文本框
-        self.result_text.append(event.content)
-        # 滚动到底部
-        self.result_text.verticalScrollBar().setValue(self.result_text.verticalScrollBar().maximum())
+        # 获取新内容
+        new_content = event.content
+        
+        # 将新内容按行分割
+        new_lines = new_content.splitlines(True)  # 保留换行符
+        
+        if new_lines:
+            # 应用过滤条件
+            filtered_content, match_count = self.filter_log_content(new_lines)
+            
+            if filtered_content:
+                # 追加过滤后的内容到结果文本框
+                self.result_text.append(filtered_content)
+                # 滚动到底部
+                self.result_text.verticalScrollBar().setValue(self.result_text.verticalScrollBar().maximum())
+                
+                # 更新状态栏
+                self.statusBar().showMessage(f"追加了 {match_count} 行匹配的日志")
+        
         return True
     return super(LogInsight, self).event(event)
 
