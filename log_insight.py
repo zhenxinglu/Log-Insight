@@ -128,6 +128,11 @@ class LogInsight(QMainWindow):
         self.word_wrap_check.stateChanged.connect(self.toggle_word_wrap)
         self.button_layout.addWidget(self.word_wrap_check)
         
+        # 新增主题切换按钮
+        self.theme_toggle_check = QCheckBox("切换主题")
+        self.theme_toggle_check.stateChanged.connect(self.toggle_theme)
+        self.button_layout.addWidget(self.theme_toggle_check)
+        
         self.button_layout.addStretch()
         
         self.open_button = QPushButton("打开日志文件")
@@ -153,6 +158,20 @@ class LogInsight(QMainWindow):
         
         # 状态栏
         self.statusBar().showMessage("就绪")
+    
+    # 新增主题切换方法
+    def toggle_theme(self, state: int) -> None:
+        """切换主题模式
+        
+        Args:
+            state: 复选框状态
+        """
+        if state == Qt.CheckState.Checked.value:
+            # 普通模式（白底黑字）
+            self.result_text.setStyleSheet("background-color: white; color: black;")
+        else:
+            # 暗黑模式（黑底白字）
+            self.result_text.setStyleSheet("background-color: black; color: white;")
     
     def open_log_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
@@ -483,6 +502,65 @@ class LogInsight(QMainWindow):
                 
         return [keyword.strip() for keyword in keywords if keyword.strip()]
     
+    def load_config(self) -> None:
+        """从配置文件加载配置"""
+        if not os.path.exists(self.CONFIG_FILE):
+            return
+            
+        try:
+            with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                
+            # 恢复搜索条件
+            if "include_keywords" in config and config["include_keywords"]:
+                self.include_entry.setText(config["include_keywords"])
+                
+            if "exclude_keywords" in config and config["exclude_keywords"]:
+                self.exclude_entry.setText(config["exclude_keywords"])
+                
+            if "start_time" in config and config["start_time"]:
+                self.start_time_entry.setText(config["start_time"])
+                
+            if "end_time" in config and config["end_time"]:
+                self.end_time_entry.setText(config["end_time"])
+                
+            # 恢复大小写敏感设置
+            if "include_case_sensitive" in config:
+                self.include_case_sensitive.setChecked(config["include_case_sensitive"])
+                
+            if "exclude_case_sensitive" in config:
+                self.exclude_case_sensitive.setChecked(config["exclude_case_sensitive"])
+                
+            # 恢复自动换行设置
+            if "word_wrap" in config:
+                self.word_wrap_check.setChecked(config["word_wrap"])
+                self.toggle_word_wrap(Qt.CheckState.Checked.value if config["word_wrap"] else Qt.CheckState.Unchecked.value)
+                
+            # 恢复字体大小
+            if "font_size" in config:
+                self.current_font_size = config["font_size"]
+                font = self.result_text.font()
+                font.setPointSize(self.current_font_size)
+                self.result_text.setFont(font)
+                
+            # 恢复主题设置
+            if "theme" in config:
+                self.theme_toggle_check.setChecked(config["theme"])
+                self.toggle_theme(Qt.CheckState.Checked.value if config["theme"] else Qt.CheckState.Unchecked.value)
+                
+            # 恢复上次打开的文件
+            if "last_file" in config and config["last_file"] and os.path.exists(config["last_file"]):
+                self.current_file = config["last_file"]
+                with open(self.current_file, 'r', encoding='utf-8', errors='ignore') as file:
+                    self.log_content = file.readlines()
+                
+                self.statusBar().showMessage(f"已加载文件: {os.path.basename(self.current_file)} - {len(self.log_content)} 行")
+                self.setWindowTitle(f"LogInsight - {self.current_file}")
+                self.result_text.setText("".join(self.log_content))
+                
+        except Exception as e:
+            self.statusBar().showMessage(f"加载配置失败: {str(e)}")
+    
     def save_config(self) -> None:
         """保存当前配置到配置文件"""
         config = {
@@ -494,7 +572,8 @@ class LogInsight(QMainWindow):
             "exclude_case_sensitive": self.exclude_case_sensitive.isChecked(),
             "word_wrap": self.word_wrap_check.isChecked(),
             "font_size": self.current_font_size,
-            "last_file": self.current_file if self.current_file else ""
+            "last_file": self.current_file if self.current_file else "",
+            "theme": self.theme_toggle_check.isChecked()  # 新增主题配置
         }
         
         try:
@@ -502,7 +581,7 @@ class LogInsight(QMainWindow):
                 json.dump(config, f, ensure_ascii=False, indent=4)
         except Exception as e:
             self.statusBar().showMessage(f"保存配置失败: {str(e)}")
-    
+
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         """处理拖拽进入事件，接受文件拖放
         
@@ -547,60 +626,6 @@ class LogInsight(QMainWindow):
                     self.save_config()
                 except Exception as e:
                     QMessageBox.critical(self, "错误", f"无法打开文件: {str(e)}")
-    
-    def load_config(self) -> None:
-        """从配置文件加载配置"""
-        if not os.path.exists(self.CONFIG_FILE):
-            return
-            
-        try:
-            with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                
-            # 恢复搜索条件
-            if "include_keywords" in config and config["include_keywords"]:
-                self.include_entry.setText(config["include_keywords"])
-                
-            if "exclude_keywords" in config and config["exclude_keywords"]:
-                self.exclude_entry.setText(config["exclude_keywords"])
-                
-            if "start_time" in config and config["start_time"]:
-                self.start_time_entry.setText(config["start_time"])
-                
-            if "end_time" in config and config["end_time"]:
-                self.end_time_entry.setText(config["end_time"])
-                
-            # 恢复大小写敏感设置
-            if "include_case_sensitive" in config:
-                self.include_case_sensitive.setChecked(config["include_case_sensitive"])
-                
-            if "exclude_case_sensitive" in config:
-                self.exclude_case_sensitive.setChecked(config["exclude_case_sensitive"])
-                
-            # 恢复自动换行设置
-            if "word_wrap" in config:
-                self.word_wrap_check.setChecked(config["word_wrap"])
-                self.toggle_word_wrap(Qt.CheckState.Checked.value if config["word_wrap"] else Qt.CheckState.Unchecked.value)
-                
-            # 恢复字体大小
-            if "font_size" in config:
-                self.current_font_size = config["font_size"]
-                font = self.result_text.font()
-                font.setPointSize(self.current_font_size)
-                self.result_text.setFont(font)
-                
-            # 恢复上次打开的文件
-            if "last_file" in config and config["last_file"] and os.path.exists(config["last_file"]):
-                self.current_file = config["last_file"]
-                with open(self.current_file, 'r', encoding='utf-8', errors='ignore') as file:
-                    self.log_content = file.readlines()
-                
-                self.statusBar().showMessage(f"已加载文件: {os.path.basename(self.current_file)} - {len(self.log_content)} 行")
-                self.setWindowTitle(f"LogInsight - {self.current_file}")
-                self.result_text.setText("".join(self.log_content))
-                
-        except Exception as e:
-            self.statusBar().showMessage(f"加载配置失败: {str(e)}")
 
 
 # 自定义事件类型，用于在线程间通信
