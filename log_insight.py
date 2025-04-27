@@ -366,6 +366,38 @@ class LogInsight(QMainWindow):
             # 如果没有按下Ctrl键，则调用QTextEdit原生的wheelEvent方法处理正常滚动
             QTextEdit.wheelEvent(self.result_text, event)
     
+    def keyPressEvent(self, event) -> None:
+        """处理键盘按键事件，支持Ctrl+Home和Ctrl+End快捷键导航
+        
+        Args:
+            event: 键盘事件对象
+        """
+        # 检查是否按下了Ctrl+Home组合键（导航到首行）
+        if (event.modifiers() & Qt.KeyboardModifier.ControlModifier and 
+                event.key() == Qt.Key.Key_Home):
+            # 将文本光标移动到文档开始位置
+            cursor = self.result_text.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Start)
+            self.result_text.setTextCursor(cursor)
+            # 确保视图滚动到顶部
+            self.result_text.ensureCursorVisible()
+            self.statusBar().showMessage("已导航到首行")
+            event.accept()
+        # 检查是否按下了Ctrl+End组合键（导航到末行）
+        elif (event.modifiers() & Qt.KeyboardModifier.ControlModifier and 
+                event.key() == Qt.Key.Key_End):
+            # 将文本光标移动到文档结束位置
+            cursor = self.result_text.textCursor()
+            cursor.movePosition(cursor.MoveOperation.End)
+            self.result_text.setTextCursor(cursor)
+            # 确保视图滚动到底部
+            self.result_text.ensureCursorVisible()
+            self.statusBar().showMessage("已导航到末行")
+            event.accept()
+        else:
+            # 对于其他按键，调用父类的处理方法
+            super().keyPressEvent(event)
+    
     def toggle_word_wrap(self, state: int) -> None:
         """切换自动换行
         
