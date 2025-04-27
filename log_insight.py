@@ -320,7 +320,7 @@ class LogInsight(QMainWindow):
         self.statusBar().showMessage("已复制全部内容到剪贴板")
     
     def on_mouse_wheel(self, event: QWheelEvent) -> None:
-        """处理Ctrl+鼠标滚轮事件，调整字体大小
+        """处理鼠标滚轮事件，支持Ctrl+滚轮调整字体大小和普通滚轮滚动文本
         
         Args:
             event: 鼠标事件对象
@@ -346,8 +346,8 @@ class LogInsight(QMainWindow):
             # 阻止事件继续传播
             event.accept()
         else:
-            # 如果没有按下Ctrl键，则调用父类的wheelEvent方法处理正常滚动
-            super().wheelEvent(event)
+            # 如果没有按下Ctrl键，则调用QTextEdit原生的wheelEvent方法处理正常滚动
+            QTextEdit.wheelEvent(self.result_text, event)
     
     def toggle_word_wrap(self, state: int) -> None:
         """切换自动换行
