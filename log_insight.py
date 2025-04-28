@@ -158,7 +158,7 @@ class LogInsight(QMainWindow):
         
         self.result_text = QTextEdit()
         self.result_text.setReadOnly(True)
-        self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)  # 默认启用自动换行
+        self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth) 
         self.result_text.setFont(QFont("Consolas", self.current_font_size))
         self.result_text.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.result_text.customContextMenuRequested.connect(self.show_context_menu)
@@ -178,10 +178,8 @@ class LogInsight(QMainWindow):
             state: 复选框状态
         """
         if state == Qt.CheckState.Checked.value:
-            # 普通模式（白底黑字）
             self.result_text.setStyleSheet("background-color: white; color: black;")
         else:
-            # 暗黑模式（黑底白字）
             self.result_text.setStyleSheet("background-color: black; color: white;")
     
     def open_log_file(self) -> None:
@@ -663,11 +661,16 @@ class LogInsight(QMainWindow):
             font.setPointSize(self.current_font_size)
             self.result_text.setFont(font)
             
+            # 更新状态栏
+            self.statusBar().showMessage(f"字体大小: {self.current_font_size}")
+            
             # 处理事件
             event.accept()
         else:
-            # 如果没有按下Ctrl键，则调用原生的wheelEvent方法处理正常滚动
-            super().wheelEvent(event)
+            # 如果没有按下Ctrl键，则将事件传递给QTextEdit的原生wheelEvent方法处理正常滚动
+            # 注意：不能使用super().wheelEvent(event)，因为当前类是QMainWindow的子类
+            # 需要将事件传递给QTextEdit的原生方法
+            QTextEdit.wheelEvent(self.result_text, event)
             
             # 滚动后更新高亮（使用计时器延迟执行，避免频繁更新）
             if self.search_matches and hasattr(self, 'search_entry') and self.search_entry:
@@ -679,28 +682,6 @@ class LogInsight(QMainWindow):
                     self.scroll_timer.timeout.connect(self.highlight_visible_matches)
                 
                 self.scroll_timer.start(100)  # 100ms延迟，避免滚动时频繁更新
-            else:
-                self.scroll_timer = QTimer()
-                self.scroll_timer.setSingleShot(True)
-                self.scroll_timer.timeout.connect(self.highlight_visible_matches)
-            
-            self.scroll_timer.start(100)  # 100ms延迟，避免滚动时频繁更新
-            
-            # 更新状态栏
-            self.statusBar().showMessage(f"字体大小: {self.current_font_size}")
-            
-            # 阻止事件继续传播
-            event.accept()
-            
-            # 滚动后更新高亮（使用计时器延迟执行，避免频繁更新）
-            if hasattr(self, 'scroll_timer'):
-                self.scroll_timer.stop()
-            else:
-                self.scroll_timer = QTimer()
-                self.scroll_timer.setSingleShot(True)
-                self.scroll_timer.timeout.connect(self.highlight_visible_matches)
-            
-            self.scroll_timer.start(100)  # 100ms延迟，避免滚动时频繁更新
     
     def keyPressEvent(self, event) -> None:
         """处理键盘按键事件，支持Ctrl+Home和Ctrl+End快捷键导航
