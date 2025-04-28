@@ -4,7 +4,6 @@ import os
 import json
 import time
 import pyperclip
-import io
 from datetime import datetime
 from typing import List, Pattern, Optional, Any, Dict, Tuple, Union
 from threading import Thread, Event
@@ -13,10 +12,11 @@ from PIL import Image, ImageDraw
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QTextEdit, QScrollBar, QFrame, QGroupBox,
                              QPushButton, QCheckBox, QFileDialog, QMessageBox, QMenu,
-                             QGridLayout, QSizePolicy)
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QEvent, QObject, QTimer, QMimeData
-from PyQt6.QtGui import (QFont, QAction, QWheelEvent, QIcon, QPixmap, QImage, QContextMenuEvent,
-                         QDragEnterEvent, QDropEvent)
+                             QGridLayout, QSizePolicy, QDialog, QToolButton)
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QEvent, QObject, QTimer
+from PyQt6.QtGui import (QFont, QAction, QWheelEvent, QIcon, QImage, QContextMenuEvent,
+                         QDragEnterEvent, QDropEvent, QTextCursor, QTextCharFormat, QKeySequence,
+                         QShortcut)
 
 
 class LogInsight(QMainWindow):
@@ -37,6 +37,14 @@ class LogInsight(QMainWindow):
         self.tail_thread: Optional[Thread] = None
         self.current_font_size: int = 10
         
+        # 初始化搜索相关变量
+        self.search_dialog = None
+        self.search_matches: List[int] = []
+        self.current_match_index: int = -1
+        self.search_highlight_format = QTextCharFormat()
+        self.search_highlight_format.setBackground(Qt.GlobalColor.yellow)
+        self.search_highlight_format.setForeground(Qt.GlobalColor.black)
+        
         # 创建中央部件
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -53,6 +61,9 @@ class LogInsight(QMainWindow):
         
         # 启用拖放功能
         self.setAcceptDrops(True)
+        
+        # 设置快捷键
+        self.setup_shortcuts()
     
     def setup_ui(self) -> None:
         # 创建过滤器框架
@@ -355,6 +366,282 @@ class LogInsight(QMainWindow):
         self.result_text.copy()
         self.statusBar().showMessage("已复制全部内容到剪贴板")
     
+    def setup_shortcuts(self) -> None:
+        """设置快捷键"""
+        # 设置Ctrl+F快捷键
+        self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.search_shortcut.activated.connect(self.show_search_dialog)
+    
+    def show_search_dialog(self) -> None:
+        """显示搜索对话框"""
+        # 如果对话框已存在，则直接显示
+        if self.search_dialog is not None and self.search_dialog.isVisible():
+            self.search_dialog.activateWindow()
+            return
+        
+        # 创建搜索对话框
+        self.search_dialog = QDialog(self)
+        self.search_dialog.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.search_dialog.setStyleSheet("""
+            QDialog {
+                background-color: #f0f0f0;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+            }
+            QLineEdit {
+                border: 1px solid #cccccc;
+                border-radius: 2px;
+                padding: 2px 4px;
+                background-color: white;
+                selection-background-color: #0078d7;
+            }
+            QToolButton {
+                border: none;
+                background-color: transparent;
+                padding: 2px;
+            }
+            QToolButton:hover {
+                background-color: #e0e0e0;
+                border-radius: 2px;
+            }
+            QToolButton:pressed {
+                background-color: #d0d0d0;
+            }
+        """)
+        
+        # 创建布局
+        layout = QHBoxLayout(self.search_dialog)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(2)
+        
+        # 创建搜索框
+        self.search_entry = QLineEdit()
+        self.search_entry.setPlaceholderText("搜索...")
+        self.search_entry.textChanged.connect(self.search_text_changed)
+        self.search_entry.returnPressed.connect(lambda: self.navigate_search(1))  # 按回车键查找下一个
+        layout.addWidget(self.search_entry)
+        
+        # 创建上一个按钮
+        self.prev_button = QToolButton()
+        self.prev_button.setText("^")
+        self.prev_button.setToolTip("上一个匹配 (Shift+Enter)")
+        self.prev_button.clicked.connect(lambda: self.navigate_search(-1))
+        layout.addWidget(self.prev_button)
+        
+        # 创建下一个按钮
+        self.next_button = QToolButton()
+        self.next_button.setText("v")
+        self.next_button.setToolTip("下一个匹配 (Enter)")
+        self.next_button.clicked.connect(lambda: self.navigate_search(1))
+        layout.addWidget(self.next_button)
+        
+        # 创建关闭按钮
+        self.close_button = QToolButton()
+        self.close_button.setText("x")
+        self.close_button.setToolTip("关闭 (Esc)")
+        self.close_button.clicked.connect(self.close_search_dialog)
+        layout.addWidget(self.close_button)
+        
+        # 设置对话框位置 - 在结果区域的右上角
+        result_rect = self.result_group.geometry()
+        dialog_pos = self.result_group.mapToGlobal(result_rect.topRight())
+        dialog_pos.setX(dialog_pos.x() - self.search_dialog.sizeHint().width() - 10)  # 向左偏移
+        dialog_pos.setY(dialog_pos.y() + 10)  # 向下偏移
+        self.search_dialog.move(dialog_pos)
+        
+        # 显示对话框并设置焦点
+        self.search_dialog.show()
+        self.search_entry.setFocus()
+        
+        # 添加ESC键关闭对话框
+        self.esc_shortcut = QShortcut(QKeySequence("Esc"), self.search_dialog)
+        self.esc_shortcut.activated.connect(self.close_search_dialog)
+        
+        # 添加Shift+Enter快捷键查找上一个
+        self.prev_shortcut = QShortcut(QKeySequence("Shift+Return"), self.search_dialog)
+        self.prev_shortcut.activated.connect(lambda: self.navigate_search(-1))
+    
+    def close_search_dialog(self) -> None:
+        """关闭搜索对话框"""
+        if self.search_dialog:
+            self.search_dialog.close()
+            # 清除所有高亮
+            self.clear_highlights()
+    
+    def search_text_changed(self) -> None:
+        """搜索文本变化时触发"""
+        search_text = self.search_entry.text()
+        if not search_text:
+            self.clear_highlights()
+            self.search_matches = []
+            self.current_match_index = -1
+            return
+        
+        # 查找所有匹配
+        self.find_all_matches(search_text)
+        
+        # 不需要在这里更新状态栏，因为find_all_matches已经更新了
+    
+    def find_all_matches(self, search_text: str) -> None:
+        """查找所有匹配的位置，使用分批处理避免UI卡死"""
+        # 清除之前的高亮
+        self.clear_highlights()
+        
+        # 重置匹配列表
+        self.search_matches = []
+        self.current_match_index = -1
+        
+        if not search_text:
+            return
+        
+        # 获取文本内容
+        document = self.result_text.document()
+        cursor = QTextCursor(document)
+        
+        # 设置批处理参数
+        batch_size = 1000  # 每批处理的最大匹配数
+        max_matches = 10000  # 最大匹配数限制
+        current_batch = 0
+        
+        # 创建进度指示器
+        self.statusBar().showMessage("正在搜索匹配项...")
+        QApplication.processEvents()  # 确保UI更新
+        
+        # 查找匹配（分批处理）
+        while len(self.search_matches) < max_matches:
+            # 处理当前批次
+            batch_count = 0
+            batch_start_time = time.time()
+            
+            while batch_count < batch_size and len(self.search_matches) < max_matches:
+                cursor = document.find(search_text, cursor)
+                if cursor.isNull():
+                    break
+                
+                # 保存匹配位置
+                match_position = cursor.position() - len(search_text)
+                self.search_matches.append(match_position)
+                batch_count += 1
+                
+                # 确保光标向前移动，避免无限循环
+                cursor.movePosition(QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.MoveAnchor, 1)
+            
+            # 如果没有找到更多匹配或已达到最大匹配数，退出循环
+            if batch_count == 0 or len(self.search_matches) >= max_matches:
+                break
+            
+            # 更新状态栏显示进度
+            current_batch += 1
+            self.statusBar().showMessage(f"已找到 {len(self.search_matches)} 个匹配项...")
+            QApplication.processEvents()  # 确保UI更新
+            
+            # 如果批处理太快（小于50ms），增加批处理大小以提高效率
+            batch_time = time.time() - batch_start_time
+            if batch_time < 0.05 and batch_size < 5000:
+                batch_size = min(batch_size * 2, 5000)
+            # 如果批处理太慢（大于200ms），减小批处理大小以保持响应性
+            elif batch_time > 0.2 and batch_size > 100:
+                batch_size = max(batch_size // 2, 100)
+        
+        # 高亮显示（仅高亮可见区域附近的匹配项）
+        self.highlight_visible_matches()
+        
+        # 如果有匹配，选择第一个
+        if self.search_matches:
+            self.current_match_index = 0
+            self.scroll_to_match(self.current_match_index)
+            
+            # 如果达到最大匹配数限制，显示提示
+            if len(self.search_matches) >= max_matches:
+                self.statusBar().showMessage(f"找到超过 {max_matches} 个匹配项，仅显示前 {max_matches} 个")
+            else:
+                self.statusBar().showMessage(f"找到 {len(self.search_matches)} 个匹配项")
+        else:
+            self.statusBar().showMessage("没有找到匹配项")
+    
+    def navigate_search(self, direction: int) -> None:
+        """导航到下一个或上一个匹配
+        
+        Args:
+            direction: 导航方向，1表示下一个，-1表示上一个
+        """
+        if not self.search_matches:
+            return
+        
+        # 更新当前匹配索引
+        self.current_match_index = (self.current_match_index + direction) % len(self.search_matches)
+        
+        # 滚动到当前匹配
+        self.scroll_to_match(self.current_match_index)
+        
+        # 更新状态栏
+        self.statusBar().showMessage(f"匹配 {self.current_match_index + 1}/{len(self.search_matches)}")
+    
+    def scroll_to_match(self, index: int) -> None:
+        """滚动到指定索引的匹配
+        
+        Args:
+            index: 匹配索引
+        """
+        if 0 <= index < len(self.search_matches):
+            # 获取匹配位置
+            position = self.search_matches[index]
+            
+            # 创建光标并移动到匹配位置
+            cursor = QTextCursor(self.result_text.document())
+            cursor.setPosition(position)
+            cursor.setPosition(position + len(self.search_entry.text()), QTextCursor.MoveMode.KeepAnchor)
+            
+            # 设置文本光标并滚动到可见区域
+            self.result_text.setTextCursor(cursor)
+            self.result_text.ensureCursorVisible()
+            
+            # 滚动后重新高亮可见区域的匹配项
+            # 延迟一小段时间确保滚动完成
+            QTimer.singleShot(50, self.highlight_visible_matches)
+    
+    def highlight_visible_matches(self) -> None:
+        """只高亮当前可见区域附近的匹配项
+        
+        这种懒加载方式可以显著提高大量匹配项时的性能
+        """
+        if not self.search_matches or not self.search_entry:
+            return
+            
+        # 获取当前可见区域
+        visible_cursor = self.result_text.cursorForPosition(self.result_text.viewport().rect().center())
+        visible_position = visible_cursor.position()
+        
+        # 计算可见区域前后的范围（大约前后各1000个字符）
+        visible_range = 1000
+        start_pos = max(0, visible_position - visible_range)
+        end_pos = min(self.result_text.document().characterCount(), visible_position + visible_range)
+        
+        # 查找在可见范围内的匹配项
+        search_text = self.search_entry.text()
+        document = self.result_text.document()
+        
+        # 最多高亮100个匹配项，避免性能问题
+        highlight_count = 0
+        max_highlights = 100
+        
+        for pos in self.search_matches:
+            if start_pos <= pos <= end_pos and highlight_count < max_highlights:
+                # 高亮匹配文本
+                cursor_highlight = QTextCursor(document)
+                cursor_highlight.setPosition(pos)
+                cursor_highlight.setPosition(pos + len(search_text), QTextCursor.MoveMode.KeepAnchor)
+                cursor_highlight.setCharFormat(self.search_highlight_format)
+                highlight_count += 1
+    
+    def clear_highlights(self) -> None:
+        """清除所有高亮"""
+        # 重置文档格式
+        cursor = QTextCursor(self.result_text.document())
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.setCharFormat(QTextCharFormat())
+        cursor.clearSelection()
+    
     def on_mouse_wheel(self, event: QWheelEvent) -> None:
         """处理鼠标滚轮事件，支持Ctrl+滚轮调整字体大小和普通滚轮滚动文本
         
@@ -376,14 +663,44 @@ class LogInsight(QMainWindow):
             font.setPointSize(self.current_font_size)
             self.result_text.setFont(font)
             
+            # 处理事件
+            event.accept()
+        else:
+            # 如果没有按下Ctrl键，则调用原生的wheelEvent方法处理正常滚动
+            super().wheelEvent(event)
+            
+            # 滚动后更新高亮（使用计时器延迟执行，避免频繁更新）
+            if self.search_matches and hasattr(self, 'search_entry') and self.search_entry:
+                if hasattr(self, 'scroll_timer'):
+                    self.scroll_timer.stop()
+                else:
+                    self.scroll_timer = QTimer()
+                    self.scroll_timer.setSingleShot(True)
+                    self.scroll_timer.timeout.connect(self.highlight_visible_matches)
+                
+                self.scroll_timer.start(100)  # 100ms延迟，避免滚动时频繁更新
+            else:
+                self.scroll_timer = QTimer()
+                self.scroll_timer.setSingleShot(True)
+                self.scroll_timer.timeout.connect(self.highlight_visible_matches)
+            
+            self.scroll_timer.start(100)  # 100ms延迟，避免滚动时频繁更新
+            
             # 更新状态栏
             self.statusBar().showMessage(f"字体大小: {self.current_font_size}")
             
             # 阻止事件继续传播
             event.accept()
-        else:
-            # 如果没有按下Ctrl键，则调用QTextEdit原生的wheelEvent方法处理正常滚动
-            QTextEdit.wheelEvent(self.result_text, event)
+            
+            # 滚动后更新高亮（使用计时器延迟执行，避免频繁更新）
+            if hasattr(self, 'scroll_timer'):
+                self.scroll_timer.stop()
+            else:
+                self.scroll_timer = QTimer()
+                self.scroll_timer.setSingleShot(True)
+                self.scroll_timer.timeout.connect(self.highlight_visible_matches)
+            
+            self.scroll_timer.start(100)  # 100ms延迟，避免滚动时频繁更新
     
     def keyPressEvent(self, event) -> None:
         """处理键盘按键事件，支持Ctrl+Home和Ctrl+End快捷键导航
@@ -670,6 +987,5 @@ LogInsight.event = event
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = LogInsight()
-    window.show()  # 先显示窗口
-    window.showMaximized()  # 然后最大化窗口
+    window.showMaximized()  
     sys.exit(app.exec())
