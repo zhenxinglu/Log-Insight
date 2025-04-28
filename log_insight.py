@@ -12,9 +12,9 @@ from PIL import Image, ImageDraw
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QTextEdit, QScrollBar, QFrame, QGroupBox,
                              QPushButton, QCheckBox, QFileDialog, QMessageBox, QMenu,
-                             QGridLayout, QSizePolicy, QDialog, QToolButton)
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QEvent, QObject, QTimer
-from PyQt6.QtGui import (QFont, QAction, QWheelEvent, QIcon, QImage, QContextMenuEvent,
+                             QGridLayout, QDialog, QToolButton)
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer
+from PyQt6.QtGui import (QFont, QWheelEvent, QIcon, QImage, QContextMenuEvent,
                          QDragEnterEvent, QDropEvent, QTextCursor, QTextCharFormat, QKeySequence,
                          QShortcut)
 
@@ -111,12 +111,16 @@ class LogInsight(QMainWindow):
         
         self.start_time_entry = QLineEdit()
         self.start_time_entry.setPlaceholderText("00:00:00.000")
+        # 设置placeholder样式，使其更加明显
+        self.start_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
         self.time_layout.addWidget(self.start_time_entry)
         
         self.time_layout.addWidget(QLabel("至"))
         
         self.end_time_entry = QLineEdit()
         self.end_time_entry.setPlaceholderText("23:59:59.999")
+        # 设置placeholder样式，使其更加明显
+        self.end_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
         self.time_layout.addWidget(self.end_time_entry)
         
         self.filter_layout.addWidget(self.time_frame, 2, 1)
@@ -414,7 +418,7 @@ class LogInsight(QMainWindow):
         
         # 创建搜索框
         self.search_entry = QLineEdit()
-        self.search_entry.setPlaceholderText("搜索...")
+        self.search_entry.setPlaceholderText("search...")
         self.search_entry.textChanged.connect(self.search_text_changed)
         self.search_entry.returnPressed.connect(lambda: self.navigate_search(1))  # 按回车键查找下一个
         layout.addWidget(self.search_entry)
