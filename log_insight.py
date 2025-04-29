@@ -11,21 +11,30 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QLabel, QLineEdit, QTextEdit, QFrame, QGroupBox,
                              QPushButton, QCheckBox, QFileDialog, QMessageBox, QMenu,
                              QGridLayout, QDialog, QToolButton)
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer
-from PyQt6.QtGui import (QFont, QWheelEvent, 
+from PyQt6.QtGui import (QFont, QWheelEvent, QIcon,
                          QDragEnterEvent, QDropEvent, QTextCursor, QTextCharFormat, QKeySequence,
                          QShortcut)
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer
+
 
 
 class LogInsight(QMainWindow):
     # 配置文件路径
     CONFIG_FILE: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
     
+    # 图标文件路径
+    CASE_SENSITIVE_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "case_sensitive_on.svg")
+    CASE_SENSITIVE_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "case_sensitive_off.svg")
+    APP_LOGO_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "logo.svg")
+    
     def __init__(self) -> None:
         super().__init__()
         
-        # 设置窗口标题和大小
         self.setWindowTitle("Log Insight")
+        
+        # 设置应用程序图标
+        app_icon = QIcon(self.APP_LOGO_ICON)
+        self.setWindowIcon(app_icon)
         
         # 初始化变量
         self.log_content: List[str] = []
@@ -47,6 +56,10 @@ class LogInsight(QMainWindow):
         self.search_highlight_format.setBackground(Qt.GlobalColor.yellow)
         self.search_highlight_format.setForeground(Qt.GlobalColor.black)
         
+        # 加载图标
+        self.case_sensitive_on_icon = QIcon(self.CASE_SENSITIVE_ON_ICON)
+        self.case_sensitive_off_icon = QIcon(self.CASE_SENSITIVE_OFF_ICON)
+        
         # 创建中央部件
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -55,16 +68,12 @@ class LogInsight(QMainWindow):
         self.main_layout = QVBoxLayout(self.central_widget)
         self.main_layout.setContentsMargins(5, 5, 5, 5)
         
-        # 创建UI组件
         self.setup_ui()
         
-        # 加载上次的配置
         self.load_config()
         
-        # 启用拖放功能
         self.setAcceptDrops(True)
         
-        # 设置快捷键
         self.setup_shortcuts()
     
     def setup_ui(self) -> None:
@@ -128,7 +137,13 @@ class LogInsight(QMainWindow):
         self.include_case_layout = QHBoxLayout(self.include_case_frame)
         self.include_case_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.include_case_sensitive = QCheckBox("大小写敏感")
+        self.include_case_sensitive = QToolButton()
+        self.include_case_sensitive.setCheckable(True)
+        self.include_case_sensitive.setToolTip("大小写敏感")
+        self.include_case_sensitive.setIcon(self.case_sensitive_off_icon)
+        self.include_case_sensitive.setIconSize(QToolButton().sizeHint())
+        self.include_case_sensitive.toggled.connect(self.toggle_include_case_sensitive)
+        
         self.include_case_layout.addWidget(self.include_case_sensitive)
         self.filter_layout.addWidget(self.include_case_frame, 1, 2)
         
@@ -145,7 +160,13 @@ class LogInsight(QMainWindow):
         self.exclude_case_layout = QHBoxLayout(self.exclude_case_frame)
         self.exclude_case_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.exclude_case_sensitive = QCheckBox("大小写敏感")
+        self.exclude_case_sensitive = QToolButton()
+        self.exclude_case_sensitive.setCheckable(True)
+        self.exclude_case_sensitive.setToolTip("大小写敏感")
+        self.exclude_case_sensitive.setIcon(self.case_sensitive_off_icon)
+        self.exclude_case_sensitive.setIconSize(QToolButton().sizeHint())
+        self.exclude_case_sensitive.toggled.connect(self.toggle_exclude_case_sensitive)
+        
         self.exclude_case_layout.addWidget(self.exclude_case_sensitive)
         self.filter_layout.addWidget(self.exclude_case_frame, 2, 2)
         
@@ -261,7 +282,30 @@ class LogInsight(QMainWindow):
         # 隐藏或显示控制面板内容
         self.control_content_widget.setVisible(not self.filter_collapsed)
         
-        # 移除adjustSize调用，防止窗口大小变化
+    
+    # 切换包含关键字大小写敏感图标
+    def toggle_include_case_sensitive(self, checked: bool) -> None:
+        """切换包含关键字大小写敏感图标
+        
+        Args:
+            checked: 按钮是否被选中
+        """
+        if checked:
+            self.include_case_sensitive.setIcon(self.case_sensitive_on_icon)
+        else:
+            self.include_case_sensitive.setIcon(self.case_sensitive_off_icon)
+    
+    # 切换排除关键字大小写敏感图标
+    def toggle_exclude_case_sensitive(self, checked: bool) -> None:
+        """切换排除关键字大小写敏感图标
+        
+        Args:
+            checked: 按钮是否被选中
+        """
+        if checked:
+            self.exclude_case_sensitive.setIcon(self.case_sensitive_on_icon)
+        else:
+            self.exclude_case_sensitive.setIcon(self.case_sensitive_off_icon)
     
     # 新增主题切换方法
     def toggle_theme(self, state: int) -> None:

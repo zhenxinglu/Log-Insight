@@ -1,0 +1,11 @@
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- 添加阴影滤镜 -->
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="0" stdDeviation="0.8" flood-opacity="0.3" flood-color="#000"/>
+    </filter>
+  </defs>
+  <!-- 应用均衡阴影效果的矩形 -->
+  <rect x="2" y="2" width="20" height="20" rx="2" ry="2" fill="#e6f7ff" stroke="#1890ff" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="12" y="17" font-family="Arial" font-size="14" text-anchor="middle" fill="#1890ff">Aa</text>
+</svg>
