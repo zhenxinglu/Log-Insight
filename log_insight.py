@@ -4,7 +4,7 @@ import os
 import json
 import time
 from datetime import datetime
-from typing import List, Pattern, Optional, Any, Dict, Tuple, Union
+from typing import List, Pattern, Optional, Tuple
 from threading import Thread, Event
 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -14,15 +14,15 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
 from PyQt6.QtGui import (QFont, QWheelEvent, QIcon,
                          QDragEnterEvent, QDropEvent, QTextCursor, QTextCharFormat, QKeySequence,
                          QShortcut)
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer, QSize
+from PyQt6.QtCore import Qt, QEvent, QTimer, QSize, QFileSystemWatcher
 
 
 
 class LogInsight(QMainWindow):
-    # 配置文件路径
+    # Configuration file path
     CONFIG_FILE: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
     
-    # 图标文件路径
+    # Icon file paths
     CASE_SENSITIVE_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "case_sensitive_on.svg")
     CASE_SENSITIVE_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "case_sensitive_off.svg")
     APP_LOGO_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "logo.svg")
@@ -34,23 +34,24 @@ class LogInsight(QMainWindow):
         
         self.setWindowTitle("Log Insight")
         
-        # 设置应用程序图标
+        # Set application icon
         app_icon = QIcon(self.APP_LOGO_ICON)
         self.setWindowIcon(app_icon)
         
-        # 初始化变量
+        # Initialize variables
         self.log_content: List[str] = []
         self.current_file: Optional[str] = None
-        self.last_file_size: int = 0
-        self.tail_stop_event: Event = Event()
-        self.tail_thread: Optional[Thread] = None
         self.current_font_size: int = 10
         
-        # 初始化折叠状态变量
+        # Initialize file watcher
+        self.file_watcher = QFileSystemWatcher()
+        self.file_watcher.fileChanged.connect(self.on_file_changed)
+        
+        # Initialize collapse state variables
         self.filter_collapsed: bool = False
         self.button_collapsed: bool = False
         
-        # 初始化搜索相关变量
+        # Initialize search-related variables
         self.search_dialog = None
         self.search_matches: List[int] = []
         self.current_match_index: int = -1
@@ -58,7 +59,6 @@ class LogInsight(QMainWindow):
         self.search_highlight_format.setBackground(Qt.GlobalColor.yellow)
         self.search_highlight_format.setForeground(Qt.GlobalColor.black)
         
-        # 加载图标
         self.case_sensitive_on_icon = QIcon(self.CASE_SENSITIVE_ON_ICON)
         self.case_sensitive_off_icon = QIcon(self.CASE_SENSITIVE_OFF_ICON)
         
@@ -66,16 +66,12 @@ class LogInsight(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         
-        # 创建主布局
         self.main_layout = QVBoxLayout(self.central_widget)
         self.main_layout.setContentsMargins(5, 5, 5, 5)
         
         self.setup_ui()
-        
         self.load_config()
-        
         self.setAcceptDrops(True)
-        
         self.setup_shortcuts()
     
     def setup_ui(self) -> None:
@@ -93,55 +89,55 @@ class LogInsight(QMainWindow):
         self.title_layout.setContentsMargins(0, 0, 0, 0)
         
         # 添加标题标签
-        self.control_title = QLabel("控制面板")
+        self.control_title = QLabel("Control Panel")
         self.control_title.setStyleSheet("font-weight: bold;")
         self.title_layout.addWidget(self.control_title)
         
         self.title_layout.addStretch()
         
-        # 添加折叠/展开按钮
+        # Add collapse/expand button
         self.control_toggle_btn = QPushButton("▼")
-        self.control_toggle_btn.setToolTip("折叠/展开控制面板")
-        self.control_toggle_btn.setFixedSize(20, 20)  # 设置按钮大小
+        self.control_toggle_btn.setToolTip("Collapse/Expand Control Panel")
+        self.control_toggle_btn.setFixedSize(20, 20)  # Set button size
         self.control_toggle_btn.clicked.connect(self.toggle_control_panel)
         self.title_layout.addWidget(self.control_toggle_btn)
         
-        # 将标题栏添加到控制面板布局
+        # Add title bar to control panel layout
         self.control_layout.addWidget(self.title_widget)
         
-        # 创建控制面板内容区域
+        # Create control panel content area
         self.control_content_widget = QWidget()
         self.control_content_layout = QVBoxLayout(self.control_content_widget)
         self.control_content_layout.setContentsMargins(0, 0, 0, 0)
-        self.control_content_layout.setSpacing(5)  # 减少垂直间距
+        self.control_content_layout.setSpacing(5)  # Reduce vertical spacing
         self.control_layout.addWidget(self.control_content_widget)
         
-        # 创建过滤器部分
+        # Create filter section
         self.filter_widget = QWidget()
         self.filter_layout = QGridLayout(self.filter_widget)
         self.filter_layout.setContentsMargins(0, 0, 0, 0)
-        self.filter_layout.setVerticalSpacing(3)  # 减少垂直间距
+        self.filter_layout.setVerticalSpacing(3)  # Reduce vertical spacing
         
-        # 添加过滤器标题
-        self.filter_title = QLabel("<b>过滤器</b>")
+        # Add filter title
+        self.filter_title = QLabel("<b>Filters</b>")
         self.filter_layout.addWidget(self.filter_title, 0, 0, 1, 3)
         
-        # 包含关键字
-        self.filter_layout.addWidget(QLabel("包含关键字:"), 1, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        # Include keywords
+        self.filter_layout.addWidget(QLabel("Include Keywords:"), 1, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         self.include_entry = QLineEdit()
         self.include_entry.setPlaceholderText("keyword1 \"multiple words keywords\" keyword3")
-        # 添加回车键事件处理
+        # Add enter key event handler
         self.include_entry.returnPressed.connect(self.search_log)
         self.filter_layout.addWidget(self.include_entry, 1, 1)
         
-        # 包含关键字大小写敏感开关
+        # Include keywords case sensitive toggle
         self.include_case_frame = QWidget()
         self.include_case_layout = QHBoxLayout(self.include_case_frame)
         self.include_case_layout.setContentsMargins(0, 0, 0, 0)
         
         self.include_case_sensitive = QToolButton()
         self.include_case_sensitive.setCheckable(True)
-        self.include_case_sensitive.setToolTip("大小写敏感")
+        self.include_case_sensitive.setToolTip("Case Sensitive")
         self.include_case_sensitive.setIcon(self.case_sensitive_off_icon)
         self.include_case_sensitive.setIconSize(QToolButton().sizeHint())
         self.include_case_sensitive.toggled.connect(self.toggle_include_case_sensitive)
@@ -149,22 +145,22 @@ class LogInsight(QMainWindow):
         self.include_case_layout.addWidget(self.include_case_sensitive)
         self.filter_layout.addWidget(self.include_case_frame, 1, 2)
         
-        # 排除关键字
-        self.filter_layout.addWidget(QLabel("排除关键字:"), 2, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        # Exclude keywords
+        self.filter_layout.addWidget(QLabel("Exclude Keywords:"), 2, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         self.exclude_entry = QLineEdit()
         self.exclude_entry.setPlaceholderText("keyword1 \"multiple words keywords\" keyword3")
-        # 添加回车键事件处理
+        # Add enter key event handler
         self.exclude_entry.returnPressed.connect(self.search_log)
         self.filter_layout.addWidget(self.exclude_entry, 2, 1)
         
-        # 排除关键字大小写敏感开关
+        # Exclude keywords case sensitive toggle
         self.exclude_case_frame = QWidget()
         self.exclude_case_layout = QHBoxLayout(self.exclude_case_frame)
         self.exclude_case_layout.setContentsMargins(0, 0, 0, 0)
         
         self.exclude_case_sensitive = QToolButton()
         self.exclude_case_sensitive.setCheckable(True)
-        self.exclude_case_sensitive.setToolTip("大小写敏感")
+        self.exclude_case_sensitive.setToolTip("Case Sensitive")
         self.exclude_case_sensitive.setIcon(self.case_sensitive_off_icon)
         self.exclude_case_sensitive.setIconSize(QToolButton().sizeHint())
         self.exclude_case_sensitive.toggled.connect(self.toggle_exclude_case_sensitive)
@@ -172,8 +168,8 @@ class LogInsight(QMainWindow):
         self.exclude_case_layout.addWidget(self.exclude_case_sensitive)
         self.filter_layout.addWidget(self.exclude_case_frame, 2, 2)
         
-        # 时间范围
-        self.filter_layout.addWidget(QLabel("时间范围:"), 3, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        # Time range
+        self.filter_layout.addWidget(QLabel("Time Range:"), 3, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         
         self.time_frame = QWidget()
         self.time_layout = QHBoxLayout(self.time_frame)
@@ -181,49 +177,49 @@ class LogInsight(QMainWindow):
         
         self.start_time_entry = QLineEdit()
         self.start_time_entry.setPlaceholderText("00:00:00.000")
-        # 设置placeholder样式，使其更加明显
+        # Set placeholder style to make it more visible
         self.start_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
-        # 添加回车键事件处理
+        # Add enter key event handler
         self.start_time_entry.returnPressed.connect(self.search_log)
         self.time_layout.addWidget(self.start_time_entry)
         
-        self.time_layout.addWidget(QLabel("至"))
+        self.time_layout.addWidget(QLabel("to"))
         
         self.end_time_entry = QLineEdit()
         self.end_time_entry.setPlaceholderText("23:59:59.999")
-        # 设置placeholder样式，使其更加明显
+        # Set placeholder style to make it more visible
         self.end_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
-        # 添加回车键事件处理
+        # Add enter key event handler
         self.end_time_entry.returnPressed.connect(self.search_log)
         self.time_layout.addWidget(self.end_time_entry)
         
         self.filter_layout.addWidget(self.time_frame, 3, 1)
         
-        # 添加过滤器部分到控制面板
+        # Add filter section to control panel
         self.control_content_layout.addWidget(self.filter_widget)
         
-        # 添加分隔线
+        # Add separator
         self.separator = QFrame()
         self.separator.setFrameShape(QFrame.Shape.HLine)
         self.separator.setFrameShadow(QFrame.Shadow.Sunken)
         self.control_content_layout.addWidget(self.separator)
         
-        # 创建操作部分
+        # Create operations section
         self.button_widget = QWidget()
         self.button_layout = QVBoxLayout(self.button_widget)
         self.button_layout.setContentsMargins(0, 0, 0, 0)
-        self.button_layout.setSpacing(3)  # 减少垂直间距
+        self.button_layout.setSpacing(3)  # Reduce vertical spacing
         
-        # 添加操作标题
-        self.button_title = QLabel("<b>操作</b>")
+        # Add operations title
+        self.button_title = QLabel("<b>Operations</b>")
         self.button_layout.addWidget(self.button_title)
         
-        # 创建按钮内容区域
+        # Create button content area
         self.button_frame = QWidget()
         self.buttons_layout = QHBoxLayout(self.button_frame)
         self.buttons_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.search_button = QPushButton("过滤日志")
+        self.search_button = QPushButton("Filter Log")
         self.search_button.clicked.connect(self.search_log)
         self.buttons_layout.addWidget(self.search_button)
         
@@ -236,24 +232,24 @@ class LogInsight(QMainWindow):
         self.word_wrap_check.stateChanged.connect(self.toggle_word_wrap)
         self.buttons_layout.addWidget(self.word_wrap_check)
         
-        # 新增主题切换按钮
-        self.theme_toggle_check = QCheckBox("切换主题")
+        # Add theme toggle button
+        self.theme_toggle_check = QCheckBox("Toggle Theme")
         self.theme_toggle_check.stateChanged.connect(self.toggle_theme)
         self.buttons_layout.addWidget(self.theme_toggle_check)
         
         self.buttons_layout.addStretch()
         
-        self.open_button = QPushButton("打开日志文件")
+        self.open_button = QPushButton("Open Log File")
         self.open_button.clicked.connect(self.open_log_file)
         self.buttons_layout.addWidget(self.open_button)
         
         self.button_layout.addWidget(self.button_frame)
         
-        # 添加操作部分到控制面板
+        # Add operations section to control panel
         self.control_content_layout.addWidget(self.button_widget)
         
-        # 结果显示区域
-        self.result_group = QGroupBox("搜索结果")
+        # Results display area
+        self.result_group = QGroupBox("Search Results")
         self.result_layout = QVBoxLayout(self.result_group)
         
         self.result_text = QTextEdit()
@@ -262,59 +258,59 @@ class LogInsight(QMainWindow):
         self.result_text.setFont(QFont("Consolas", self.current_font_size))
         self.result_text.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.result_text.customContextMenuRequested.connect(self.show_context_menu)
-        self.result_text.wheelEvent = self.on_mouse_wheel  # 重写滚轮事件
+        self.result_text.wheelEvent = self.on_mouse_wheel  # Override wheel event
         
         self.result_layout.addWidget(self.result_text)
-        self.main_layout.addWidget(self.result_group, 1)  # 添加拉伸因子，使结果区域占据更多空间
+        self.main_layout.addWidget(self.result_group, 1)  # Add stretch factor to make results area occupy more space
         
-        # 状态栏
-        self.statusBar().showMessage("就绪")
+        # Status bar
+        self.statusBar().showMessage("Ready")
     
-    # 折叠/展开控制面板
+    # Collapse/Expand control panel
     def toggle_control_panel(self) -> None:
-        """折叠或展开控制面板（包含过滤器和操作区域）
+        """Collapse or expand control panel (including filters and operations)
         """
-        # 使用原有的折叠状态变量，保持兼容性
+        # Use existing collapse state variable for compatibility
         self.filter_collapsed = not self.filter_collapsed
-        self.button_collapsed = self.filter_collapsed  # 保持两个状态同步
+        self.button_collapsed = self.filter_collapsed  # Keep states synchronized
         
-        # 更新按钮文本
+        # Update button text
         self.control_toggle_btn.setText("▶" if self.filter_collapsed else "▼")
         
-        # 隐藏或显示控制面板内容
+        # Hide or show control panel content
         self.control_content_widget.setVisible(not self.filter_collapsed)
         
     
-    # 切换包含关键字大小写敏感图标
+    # Toggle include keywords case sensitive icon
     def toggle_include_case_sensitive(self, checked: bool) -> None:
-        """切换包含关键字大小写敏感图标
+        """Toggle include keywords case sensitive icon
         
         Args:
-            checked: 按钮是否被选中
+            checked: Whether the button is checked
         """
         if checked:
             self.include_case_sensitive.setIcon(self.case_sensitive_on_icon)
         else:
             self.include_case_sensitive.setIcon(self.case_sensitive_off_icon)
     
-    # 切换排除关键字大小写敏感图标
+    # Toggle exclude keywords case sensitive icon
     def toggle_exclude_case_sensitive(self, checked: bool) -> None:
-        """切换排除关键字大小写敏感图标
+        """Toggle exclude keywords case sensitive icon
         
         Args:
-            checked: 按钮是否被选中
+            checked: Whether the button is checked
         """
         if checked:
             self.exclude_case_sensitive.setIcon(self.case_sensitive_on_icon)
         else:
             self.exclude_case_sensitive.setIcon(self.case_sensitive_off_icon)
     
-    # 新增主题切换方法
+    # Add theme toggle method
     def toggle_theme(self, state: int) -> None:
-        """切换主题模式
+        """Toggle theme mode
         
         Args:
-            state: 复选框状态
+            state: Checkbox state
         """
         if state == Qt.CheckState.Checked.value:
             self.result_text.setStyleSheet("background-color: white; color: black;")
@@ -324,9 +320,9 @@ class LogInsight(QMainWindow):
     def open_log_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择日志文件",
+            "Select Log File",
             "",
-            "日志文件 (*.log);;文本文件 (*.txt);;所有文件 (*.*)"
+            "Log Files (*.log);;Text Files (*.txt);;All Files (*.*)"
         )
         
         if file_path:
@@ -334,29 +330,37 @@ class LogInsight(QMainWindow):
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
                     self.log_content = file.readlines()
                 
+                # Remove previous file from watcher if exists
+                if self.current_file and self.current_file in self.file_watcher.files():
+                    self.file_watcher.removePath(self.current_file)
+                
                 self.current_file = file_path
-                self.statusBar().showMessage(f"已加载文件: {os.path.basename(file_path)} - {len(self.log_content)} 行")
+                self.statusBar().showMessage(f"File loaded: {os.path.basename(file_path)} - {len(self.log_content)} lines")
                 self.clear_results()
-                # 更新窗口标题显示文件路径
+                # Update window title to show file path
                 self.setWindowTitle(f"LogInsight - {file_path}")
                 
-                # 在结果区域显示日志内容
+                # Display log content in results area
                 self.result_text.setText("".join(self.log_content))
                 
-                # 保存当前配置
+                # Add file to watcher if tail mode is active
+                if self.tail_log_check.isChecked():
+                    self.file_watcher.addPath(self.current_file)
+                
+                # Save current configuration
                 self.save_config()
             except Exception as e:
-                QMessageBox.critical(self, "错误", f"无法打开文件: {str(e)}")
+                QMessageBox.critical(self, "Error", f"Cannot open file: {str(e)}")
     
     def filter_log_content(self, log_lines: List[str]) -> Tuple[str, int]:
         """
-        根据过滤条件过滤日志内容
+        Filter log content based on filter conditions
         
         Args:
-            log_lines: 要过滤的日志行列表
+            log_lines: List of log lines to filter
             
         Returns:
-            过滤后的文本内容和匹配行数的元组
+            Tuple of filtered text content and number of matches
         """
         # 解析包含关键字
         include_input: str = self.include_entry.text().strip()
@@ -402,31 +406,31 @@ class LogInsight(QMainWindow):
                 start_datetime = datetime.strptime(start_time, time_format)
                 use_time_filter = True
             except ValueError:
-                return "开始时间格式无效，请使用格式: " + time_format, 0
+                return "Invalid start time format, please use format: " + time_format, 0
         
         if end_time:
             try:
                 end_datetime = datetime.strptime(end_time, time_format)
                 use_time_filter = True
             except ValueError:
-                return "结束时间格式无效，请使用格式: " + time_format, 0
+                return "Invalid end time format, please use format: " + time_format, 0
         
-        # 时间正则表达式 (匹配行首 HH:MM:SS.XXX)
+        # Time regex pattern (matches HH:MM:SS.XXX at line start)
         time_pattern: Pattern = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d{3})')
         
         match_count: int = 0
         result_text = ""
         
         for line in log_lines:
-            # 检查是否包含任何排除关键字（优先级高）
+            # Check for any exclude keywords (high priority)
             if exclude_patterns and any(pattern.search(line) for pattern in exclude_patterns):
                 continue
             
-            # 检查是否包含至少一个包含关键字
+            # Check for at least one include keyword
             if include_patterns and not any(pattern.search(line) for pattern in include_patterns):
                 continue
             
-            # 时间过滤
+            # Time filtering
             if use_time_filter:
                 time_match = time_pattern.search(line)
                 if time_match:
@@ -434,19 +438,19 @@ class LogInsight(QMainWindow):
                     try:
                         line_time = datetime.strptime(line_time_str, time_format)
                         
-                        # 检查时间范围
+                        # Check time range
                         if start_datetime and line_time < start_datetime:
                             continue
                         if end_datetime and line_time > end_datetime:
                             continue
                     except ValueError:
-                        # 如果时间解析失败，跳过时间过滤
+                        # Skip time filtering if time parsing fails
                         pass
                 elif start_datetime or end_datetime:
-                    # 如果需要时间过滤但找不到时间，则跳过该行
+                    # Skip line if time filtering is needed but no time found
                     continue
             
-            # 添加匹配行到结果
+            # Add matching line to results
             result_text += line
             match_count += 1
         
@@ -454,31 +458,31 @@ class LogInsight(QMainWindow):
     
     def search_log(self) -> None:
         if not self.log_content:
-            QMessageBox.warning(self, "警告", "请先打开日志文件")
+            QMessageBox.warning(self, "Warning", "Please open a log file first")
             return
         
-        # 保存当前搜索条件
+        # Save current search conditions
         self.save_config()
         self.clear_results()
         
-        # 应用过滤条件
+        # Apply filter conditions
         result_text, match_count = self.filter_log_content(self.log_content)
         
         if match_count == 0:
-            self.result_text.setText("没有找到匹配的结果。\n")
+            self.result_text.setText("No matching results found.\n")
         else:
             self.result_text.setText(result_text)
         
-        self.statusBar().showMessage(f"找到 {match_count} 个匹配结果")
+        self.statusBar().showMessage(f"Found {match_count} matches")
     
     def clear_results(self) -> None:
         self.result_text.clear()
     
     def show_context_menu(self, position) -> None:
         context_menu = QMenu()
-        copy_action = context_menu.addAction("复制")
-        select_all_action = context_menu.addAction("全选")
-        copy_all_action = context_menu.addAction("复制全部")
+        copy_action = context_menu.addAction("Copy")
+        select_all_action = context_menu.addAction("Select All")
+        copy_all_action = context_menu.addAction("Copy All")
         
         action = context_menu.exec(self.result_text.mapToGlobal(position))
         
@@ -491,7 +495,7 @@ class LogInsight(QMainWindow):
     
     def copy_selection(self) -> None:
         self.result_text.copy()
-        self.statusBar().showMessage("已复制选中内容到剪贴板")
+        self.statusBar().showMessage("Selected content copied to clipboard")
     
     def select_all(self) -> None:
         self.result_text.selectAll()
@@ -501,22 +505,22 @@ class LogInsight(QMainWindow):
         cursor.select(cursor.SelectionType.Document)
         self.result_text.setTextCursor(cursor)
         self.result_text.copy()
-        self.statusBar().showMessage("已复制全部内容到剪贴板")
+        self.statusBar().showMessage("All content copied to clipboard")
     
     def setup_shortcuts(self) -> None:
-        """设置快捷键"""
-        # 设置Ctrl+F快捷键
+        """Set up keyboard shortcuts"""
+        # Set up Ctrl+F shortcut
         self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
         self.search_shortcut.activated.connect(self.show_search_dialog)
     
     def show_search_dialog(self) -> None:
-        """显示搜索对话框"""
-        # 如果对话框已存在，则直接显示
+        """Show search dialog"""
+        # If dialog already exists, just show it
         if self.search_dialog is not None and self.search_dialog.isVisible():
             self.search_dialog.activateWindow()
             return
         
-        # 创建搜索对话框
+        # Create search dialog
         self.search_dialog = QDialog(self)
         self.search_dialog.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.search_dialog.setStyleSheet("""
@@ -549,41 +553,41 @@ class LogInsight(QMainWindow):
             }
         """)
         
-        # 创建布局
+        # Create layout
         layout = QHBoxLayout(self.search_dialog)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)  # 增加间距
-        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # 垂直居中对齐
+        layout.setSpacing(4)  # Increase spacing
+        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)  # Vertical center alignment
         
-        # 创建搜索框
+        # Create search box
         self.search_entry = QLineEdit()
         self.search_entry.setPlaceholderText("search...")
         self.search_entry.textChanged.connect(self.search_text_changed)
-        self.search_entry.returnPressed.connect(lambda: self.navigate_search(1))  # 按回车键查找下一个
+        self.search_entry.returnPressed.connect(lambda: self.navigate_search(1))  # Press Enter to find next
         layout.addWidget(self.search_entry)
         
-        # 创建上一个按钮
+        # Create previous button
         self.prev_button = QToolButton()
         self.prev_button.setIcon(QIcon(self.ARROW_UP_ICON))
-        self.prev_button.setIconSize(QSize(16, 16))  # 固定图标大小
-        self.prev_button.setToolTip("上一个匹配 (Shift+Enter)")
+        self.prev_button.setIconSize(QSize(16, 16))  # Fixed icon size
+        self.prev_button.setToolTip("Previous Match (Shift+Enter)")
         self.prev_button.clicked.connect(lambda: self.navigate_search(-1))
-        self.prev_button.setFixedSize(24, 24)  # 固定按钮大小
+        self.prev_button.setFixedSize(24, 24)  # Fixed button size
         layout.addWidget(self.prev_button)
         
-        # 创建下一个按钮
+        # Create next button
         self.next_button = QToolButton()
         self.next_button.setIcon(QIcon(self.ARROW_DOWN_ICON))
-        self.next_button.setIconSize(QSize(16, 16))  # 固定图标大小
-        self.next_button.setToolTip("下一个匹配 (Enter)")
+        self.next_button.setIconSize(QSize(16, 16))  # Fixed icon size
+        self.next_button.setToolTip("Next Match (Enter)")
         self.next_button.clicked.connect(lambda: self.navigate_search(1))
-        self.next_button.setFixedSize(24, 24)  # 固定按钮大小
+        self.next_button.setFixedSize(24, 24)  # Fixed button size
         layout.addWidget(self.next_button)
         
-        # 创建关闭按钮
+        # Create close button
         self.close_button = QToolButton()
         self.close_button.setText("x")
-        self.close_button.setToolTip("关闭 (Esc)")
+        self.close_button.setToolTip("Close (Esc)")
         self.close_button.clicked.connect(self.close_search_dialog)
         layout.addWidget(self.close_button)
         
@@ -602,19 +606,19 @@ class LogInsight(QMainWindow):
         self.esc_shortcut = QShortcut(QKeySequence("Esc"), self.search_dialog)
         self.esc_shortcut.activated.connect(self.close_search_dialog)
         
-        # 添加Shift+Enter快捷键查找上一个
+        # Add Shift+Enter shortcut to find previous match
         self.prev_shortcut = QShortcut(QKeySequence("Shift+Return"), self.search_dialog)
         self.prev_shortcut.activated.connect(lambda: self.navigate_search(-1))
     
     def close_search_dialog(self) -> None:
-        """关闭搜索对话框"""
+        """Close search dialog"""
         if self.search_dialog:
             self.search_dialog.close()
-            # 清除所有高亮
+            # Clear all highlights
             self.clear_highlights()
     
     def search_text_changed(self) -> None:
-        """搜索文本变化时触发"""
+        """Triggered when search text changes"""
         search_text = self.search_entry.text()
         if not search_text:
             self.clear_highlights()
@@ -622,39 +626,39 @@ class LogInsight(QMainWindow):
             self.current_match_index = -1
             return
         
-        # 查找所有匹配
+        # Find all matches
         self.find_all_matches(search_text)
         
-        # 不需要在这里更新状态栏，因为find_all_matches已经更新了
+        # No need to update status bar here as find_all_matches already does it
     
     def find_all_matches(self, search_text: str) -> None:
-        """查找所有匹配的位置，使用分批处理避免UI卡死"""
-        # 清除之前的高亮
+        """Find all matching positions using batch processing to avoid UI freezing"""
+        # Clear previous highlights
         self.clear_highlights()
         
-        # 重置匹配列表
+        # Reset match list
         self.search_matches = []
         self.current_match_index = -1
         
         if not search_text:
             return
         
-        # 获取文本内容
+        # Get text content
         document = self.result_text.document()
         cursor = QTextCursor(document)
         
-        # 设置批处理参数
-        batch_size = 1000  # 每批处理的最大匹配数
-        max_matches = 10000  # 最大匹配数限制
+        # Set batch processing parameters
+        batch_size = 1000  # Maximum matches per batch
+        max_matches = 10000  # Maximum total matches limit
         current_batch = 0
         
-        # 创建进度指示器
-        self.statusBar().showMessage("正在搜索匹配项...")
-        QApplication.processEvents()  # 确保UI更新
+        # Create progress indicator
+        self.statusBar().showMessage("Searching for matches...")
+        QApplication.processEvents()  # Ensure UI updates
         
-        # 查找匹配（分批处理）
+        # Find matches (batch processing)
         while len(self.search_matches) < max_matches:
-            # 处理当前批次
+            # Process current batch
             batch_count = 0
             batch_start_time = time.time()
             
@@ -663,110 +667,110 @@ class LogInsight(QMainWindow):
                 if cursor.isNull():
                     break
                 
-                # 保存匹配位置
+                # Save match position
                 match_position = cursor.position() - len(search_text)
                 self.search_matches.append(match_position)
                 batch_count += 1
                 
-                # 确保光标向前移动，避免无限循环
+                # Ensure cursor moves forward to avoid infinite loop
                 cursor.movePosition(QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.MoveAnchor, 1)
             
-            # 如果没有找到更多匹配或已达到最大匹配数，退出循环
+            # Exit loop if no more matches found or max matches reached
             if batch_count == 0 or len(self.search_matches) >= max_matches:
                 break
             
-            # 更新状态栏显示进度
+            # Update status bar with progress
             current_batch += 1
-            self.statusBar().showMessage(f"已找到 {len(self.search_matches)} 个匹配项...")
-            QApplication.processEvents()  # 确保UI更新
+            self.statusBar().showMessage(f"Found {len(self.search_matches)} matches...")
+            QApplication.processEvents()  # Ensure UI updates
             
-            # 如果批处理太快（小于50ms），增加批处理大小以提高效率
+            # If batch processing is too fast (less than 50ms), increase batch size for efficiency
             batch_time = time.time() - batch_start_time
             if batch_time < 0.05 and batch_size < 5000:
                 batch_size = min(batch_size * 2, 5000)
-            # 如果批处理太慢（大于200ms），减小批处理大小以保持响应性
+            # If batch processing is too slow (more than 200ms), decrease batch size for responsiveness
             elif batch_time > 0.2 and batch_size > 100:
                 batch_size = max(batch_size // 2, 100)
         
-        # 高亮显示（仅高亮可见区域附近的匹配项）
+        # Highlight matches (only highlight matches near visible area)
         self.highlight_visible_matches()
         
-        # 如果有匹配，选择第一个
+        # If matches found, select the first one
         if self.search_matches:
             self.current_match_index = 0
             self.scroll_to_match(self.current_match_index)
             
-            # 如果达到最大匹配数限制，显示提示
+            # Show message if max matches limit reached
             if len(self.search_matches) >= max_matches:
-                self.statusBar().showMessage(f"找到超过 {max_matches} 个匹配项，仅显示前 {max_matches} 个")
+                self.statusBar().showMessage(f"Found over {max_matches} matches, showing first {max_matches} only")
             else:
-                self.statusBar().showMessage(f"找到 {len(self.search_matches)} 个匹配项")
+                self.statusBar().showMessage(f"Found {len(self.search_matches)} matches")
         else:
-            self.statusBar().showMessage("没有找到匹配项")
+            self.statusBar().showMessage("No matches found")
     
     def navigate_search(self, direction: int) -> None:
-        """导航到下一个或上一个匹配
+        """Navigate to next or previous match
         
         Args:
-            direction: 导航方向，1表示下一个，-1表示上一个
+            direction: Navigation direction, 1 for next, -1 for previous
         """
         if not self.search_matches:
             return
         
-        # 更新当前匹配索引
+        # Update current match index
         self.current_match_index = (self.current_match_index + direction) % len(self.search_matches)
         
-        # 滚动到当前匹配
+        # Scroll to current match
         self.scroll_to_match(self.current_match_index)
         
-        # 更新状态栏
-        self.statusBar().showMessage(f"匹配 {self.current_match_index + 1}/{len(self.search_matches)}")
+        # Update status bar
+        self.statusBar().showMessage(f"Match {self.current_match_index + 1}/{len(self.search_matches)}")
     
     def scroll_to_match(self, index: int) -> None:
-        """滚动到指定索引的匹配
+        """Scroll to match at specified index
         
         Args:
-            index: 匹配索引
+            index: Match index
         """
         if 0 <= index < len(self.search_matches):
-            # 获取匹配位置
+            # Get match position
             position = self.search_matches[index]
             
-            # 创建光标并移动到匹配位置
+            # Create cursor and move to match position
             cursor = QTextCursor(self.result_text.document())
             cursor.setPosition(position)
             cursor.setPosition(position + len(self.search_entry.text()), QTextCursor.MoveMode.KeepAnchor)
             
-            # 设置文本光标并滚动到可见区域
+            # Set text cursor and scroll to visible area
             self.result_text.setTextCursor(cursor)
             self.result_text.ensureCursorVisible()
             
-            # 滚动后重新高亮可见区域的匹配项
-            # 延迟一小段时间确保滚动完成
+            # Rehighlight matches in visible area after scrolling
+            # Delay slightly to ensure scrolling completes
             QTimer.singleShot(50, self.highlight_visible_matches)
     
     def highlight_visible_matches(self) -> None:
-        """只高亮当前可见区域附近的匹配项
+        """Only highlight matches near the current visible area
         
-        这种懒加载方式可以显著提高大量匹配项时的性能
+        This lazy loading approach significantly improves performance with many matches
         """
         if not self.search_matches or not self.search_entry:
             return
             
-        # 获取当前可见区域
+        # Get current visible area
         visible_cursor = self.result_text.cursorForPosition(self.result_text.viewport().rect().center())
         visible_position = visible_cursor.position()
         
-        # 计算可见区域前后的范围（大约前后各1000个字符）
+        # Calculate range before and after visible area (about 1000 characters each)
         visible_range = 1000
         start_pos = max(0, visible_position - visible_range)
         end_pos = min(self.result_text.document().characterCount(), visible_position + visible_range)
         
-        # 查找在可见范围内的匹配项
+        # Find matches within visible range
         search_text = self.search_entry.text()
         document = self.result_text.document()
         
-        # 最多高亮100个匹配项，避免性能问题
+        # Limit to 100 highlights to avoid performance issues
         highlight_count = 0
         max_highlights = 100
         
@@ -801,25 +805,25 @@ class LogInsight(QMainWindow):
                 self.current_font_size = min(36, self.current_font_size + 1)  # 设置最大字体大小为36
             else:
                 # 减小字体
-                self.current_font_size = max(6, self.current_font_size - 1)  # 设置最小字体大小为6
+                self.current_font_size = max(6, self.current_font_size - 1)  # Set minimum font size to 6
             
-            # 更新文本框字体
+            # Update text box font
             font = self.result_text.font()
             font.setPointSize(self.current_font_size)
             self.result_text.setFont(font)
             
-            # 更新状态栏
-            self.statusBar().showMessage(f"字体大小: {self.current_font_size}")
+            # Update status bar
+            self.statusBar().showMessage(f"Font size: {self.current_font_size}")
             
-            # 处理事件
+            # Handle event
             event.accept()
         else:
-            # 如果没有按下Ctrl键，则将事件传递给QTextEdit的原生wheelEvent方法处理正常滚动
-            # 注意：不能使用super().wheelEvent(event)，因为当前类是QMainWindow的子类
-            # 需要将事件传递给QTextEdit的原生方法
+            # If Ctrl is not pressed, pass the event to QTextEdit's native wheelEvent for normal scrolling
+            # Note: Cannot use super().wheelEvent(event) because current class is a subclass of QMainWindow
+            # Need to pass the event to QTextEdit's native method
             QTextEdit.wheelEvent(self.result_text, event)
             
-            # 滚动后更新高亮（使用计时器延迟执行，避免频繁更新）
+            # Update highlights after scrolling (use timer to delay execution, avoid frequent updates)
             if self.search_matches and hasattr(self, 'search_entry') and self.search_entry:
                 if hasattr(self, 'scroll_timer'):
                     self.scroll_timer.stop()
@@ -828,45 +832,45 @@ class LogInsight(QMainWindow):
                     self.scroll_timer.setSingleShot(True)
                     self.scroll_timer.timeout.connect(self.highlight_visible_matches)
                 
-                self.scroll_timer.start(100)  # 100ms延迟，避免滚动时频繁更新
+                self.scroll_timer.start(100)  # 100ms delay to avoid frequent updates while scrolling
     
     def keyPressEvent(self, event) -> None:
-        """处理键盘按键事件，支持Ctrl+Home和Ctrl+End快捷键导航
+        """Handle keyboard events, support Ctrl+Home and Ctrl+End shortcuts for navigation
         
         Args:
-            event: 键盘事件对象
+            event: Keyboard event object
         """
-        # 检查是否按下了Ctrl+Home组合键（导航到首行）
+        # Check if Ctrl+Home combination is pressed (navigate to first line)
         if (event.modifiers() & Qt.KeyboardModifier.ControlModifier and 
                 event.key() == Qt.Key.Key_Home):
-            # 将文本光标移动到文档开始位置
+            # Move text cursor to document start
             cursor = self.result_text.textCursor()
             cursor.movePosition(cursor.MoveOperation.Start)
             self.result_text.setTextCursor(cursor)
-            # 确保视图滚动到顶部
+            # Ensure view scrolls to top
             self.result_text.ensureCursorVisible()
-            self.statusBar().showMessage("已导航到首行")
+            self.statusBar().showMessage("Navigated to first line")
             event.accept()
-        # 检查是否按下了Ctrl+End组合键（导航到末行）
+        # Check if Ctrl+End combination is pressed (navigate to last line)
         elif (event.modifiers() & Qt.KeyboardModifier.ControlModifier and 
                 event.key() == Qt.Key.Key_End):
-            # 将文本光标移动到文档结束位置
+            # Move text cursor to document end
             cursor = self.result_text.textCursor()
             cursor.movePosition(cursor.MoveOperation.End)
             self.result_text.setTextCursor(cursor)
-            # 确保视图滚动到底部
+            # Ensure view scrolls to bottom
             self.result_text.ensureCursorVisible()
-            self.statusBar().showMessage("已导航到末行")
+            self.statusBar().showMessage("Navigated to last line")
             event.accept()
         else:
-            # 对于其他按键，调用父类的处理方法
+            # For other keys, call parent class handler
             super().keyPressEvent(event)
     
     def toggle_word_wrap(self, state: int) -> None:
-        """切换自动换行
+        """Toggle word wrap
         
         Args:
-            state: 复选框状态
+            state: Checkbox state
         """
         if state == Qt.CheckState.Checked.value:
             self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
@@ -874,51 +878,76 @@ class LogInsight(QMainWindow):
             self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
     
     def toggle_tail_log(self, state: int) -> None:
-        """切换日志跟踪模式
+        """Toggle log tail mode using QFileSystemWatcher
         
         Args:
-            state: 复选框状态
+            state: Checkbox state
         """
         if state == Qt.CheckState.Checked.value:
             if self.current_file and os.path.exists(self.current_file):
-                self.tail_stop_event.clear()
-                self.tail_thread = Thread(target=self.tail_file, daemon=True)
-                self.tail_thread.start()
-                self.statusBar().showMessage("已启动日志跟踪模式")
+                # Add file to watcher if not already watching
+                if self.current_file not in self.file_watcher.files():
+                    self.file_watcher.addPath(self.current_file)
+                self.statusBar().showMessage("Log tail mode started")
             else:
                 self.tail_log_check.setChecked(False)
-                QMessageBox.warning(self, "警告", "请先打开日志文件")
+                QMessageBox.warning(self, "Warning", "Please open a log file first")
         else:
-            if self.tail_thread and self.tail_thread.is_alive():
-                self.tail_stop_event.set()
-                self.tail_thread.join(1.0)  # 等待线程结束，最多等待1秒
-                self.statusBar().showMessage("已停止日志跟踪模式")
+            # Remove file from watcher
+            if self.current_file and self.current_file in self.file_watcher.files():
+                self.file_watcher.removePath(self.current_file)
+            self.statusBar().showMessage("Log tail mode stopped")
     
-    def tail_file(self) -> None:
-        """跟踪日志文件变化"""
-        if not self.current_file:
+    def on_file_changed(self, path: str) -> None:
+        """Handle file change events from QFileSystemWatcher
+        
+        Args:
+            path: Path to the changed file
+        """
+        if not self.tail_log_check.isChecked() or path != self.current_file:
             return
             
         try:
-            self.last_file_size = os.path.getsize(self.current_file)
-            
-            while not self.tail_stop_event.is_set():
-                if os.path.exists(self.current_file):
-                    current_size = os.path.getsize(self.current_file)
-                    
-                    if current_size > self.last_file_size:
-                        with open(self.current_file, 'r', encoding='utf-8', errors='ignore') as file:
-                            file.seek(self.last_file_size)
-                            new_content = file.read()
-                            
-                        self.last_file_size = current_size
-                        
-                        # 更新UI（在主线程中）
-                        QApplication.instance().postEvent(self, TailLogEvent(new_content))
+            if os.path.exists(path):
+                # Get current file size
+                current_size = os.path.getsize(path)
                 
-                time.sleep(1.0)  # 每秒检查一次文件变化
+                # Read only new content
+                with open(path, 'r', encoding='utf-8', errors='ignore') as file:
+                    # Get current content length in the text edit
+                    current_content_length = len(self.result_text.toPlainText())
+                    
+                    # If file is smaller than what we have (file was truncated), read from beginning
+                    if current_size < current_content_length:
+                        file.seek(0)
+                    else:
+                        # Otherwise, read only new content
+                        file.seek(max(0, current_size - (current_size - current_content_length)))
+                    
+                    new_content = file.read()
+                
+                if new_content:
+                    # Split new content into lines
+                    new_lines = new_content.splitlines(True)  # Keep line breaks
+                    
+                    if new_lines:
+                        # Apply filter conditions
+                        filtered_content, match_count = self.filter_log_content(new_lines)
+                        
+                        if filtered_content:
+                            # Append filtered content to results text box
+                            self.result_text.append(filtered_content)
+                            # Scroll to bottom
+                            self.result_text.verticalScrollBar().setValue(self.result_text.verticalScrollBar().maximum())
+                            
+                            # Update status bar
+                            self.statusBar().showMessage(f"Appended {match_count} matching log lines")
+                
+                # Re-add the file to the watcher if it was removed (happens on some systems when file is modified)
+                if path not in self.file_watcher.files() and self.tail_log_check.isChecked():
+                    self.file_watcher.addPath(path)
         except Exception as e:
-            print(f"Tail log error: {str(e)}")
+            print(f"File change handling error: {str(e)}")
     
     def parse_keywords(self, input_str: str) -> List[str]:
         """解析关键字，支持空格分隔和引号包含空格的关键字
@@ -1009,15 +1038,19 @@ class LogInsight(QMainWindow):
                 with open(self.current_file, 'r', encoding='utf-8', errors='ignore') as file:
                     self.log_content = file.readlines()
                 
-                self.statusBar().showMessage(f"已加载文件: {os.path.basename(self.current_file)} - {len(self.log_content)} 行")
-                self.setWindowTitle(f"LogInsight - {self.current_file}")
+                self.statusBar().showMessage(f"File loaded: {os.path.basename(self.current_file)} - {len(self.log_content)} lines")
+                self.setWindowTitle(f"Log Insight - {self.current_file}")
                 self.result_text.setText("".join(self.log_content))
                 
+                # 如果启用了tail模式，将文件添加到监视器
+                if self.tail_log_check.isChecked():
+                    self.file_watcher.addPath(self.current_file)
+                
         except Exception as e:
-            self.statusBar().showMessage(f"加载配置失败: {str(e)}")
+            self.statusBar().showMessage(f"Failed to load configuration: {str(e)}")
     
     def save_config(self) -> None:
-        """保存当前配置到配置文件"""
+        """Save current configuration to config file"""
         config = {
             "include_keywords": self.include_entry.text(),
             "exclude_keywords": self.exclude_entry.text(),
@@ -1028,100 +1061,72 @@ class LogInsight(QMainWindow):
             "word_wrap": self.word_wrap_check.isChecked(),
             "font_size": self.current_font_size,
             "last_file": self.current_file if self.current_file else "",
-            "theme": self.theme_toggle_check.isChecked(),  # 新增主题配置
-            "filter_collapsed": self.filter_collapsed,  # 保存过滤器折叠状态
-            "button_collapsed": self.button_collapsed  # 保存按钮区域折叠状态
+            "theme": self.theme_toggle_check.isChecked(),  # Add theme configuration
+            "filter_collapsed": self.filter_collapsed,  # Save filter collapse state
+            "button_collapsed": self.button_collapsed  # Save button area collapse state
         }
         
         try:
             with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=4)
         except Exception as e:
-            self.statusBar().showMessage(f"保存配置失败: {str(e)}")
+            self.statusBar().showMessage(f"Failed to save configuration: {str(e)}")
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        """处理拖拽进入事件，接受文件拖放
+        """Handle drag enter event, accept file drops
         
         Args:
-            event: 拖拽进入事件对象
+            event: Drag enter event object
         """
-        # 检查是否包含文件URL
+        # Check if contains file URLs
         if event.mimeData().hasUrls():
-            # 只接受文件URL
+            # Only accept file URLs
             event.acceptProposedAction()
     
     def dropEvent(self, event: QDropEvent) -> None:
-        """处理拖放事件，打开拖放的文件
+        """Handle drop event, open dropped file
         
         Args:
-            event: 拖放事件对象
+            event: Drop event object
         """
-        # 获取拖放的文件URL列表
+        # Get list of dropped file URLs
         urls = event.mimeData().urls()
         
-        # 如果有文件被拖放
+        # If files were dropped
         if urls:
-            # 获取第一个文件的本地路径（只处理第一个文件）
+            # Get local path of first file (only process first file)
             file_path = urls[0].toLocalFile()
             
-            # 如果是有效的文件路径，则打开该文件
+            # If it's a valid file path, open the file
             if file_path and os.path.isfile(file_path):
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
                         self.log_content = file.readlines()
                     
+                    # Remove previous file from watcher if exists
+                    if self.current_file and self.current_file in self.file_watcher.files():
+                        self.file_watcher.removePath(self.current_file)
+                    
                     self.current_file = file_path
-                    self.statusBar().showMessage(f"已加载文件: {os.path.basename(file_path)} - {len(self.log_content)} 行")
+                    self.statusBar().showMessage(f"File loaded: {os.path.basename(file_path)} - {len(self.log_content)} lines")
                     self.clear_results()
-                    # 更新窗口标题显示文件路径
+                    # Update window title to show file path
                     self.setWindowTitle(f"LogInsight - {file_path}")
                     
-                    # 在结果区域显示日志内容
+                    # Display log content in results area
                     self.result_text.setText("".join(self.log_content))
                     
-                    # 保存当前配置
+                    # Add file to watcher if tail mode is active
+                    if self.tail_log_check.isChecked():
+                        self.file_watcher.addPath(self.current_file)
+                    
+                    # Save current configuration
                     self.save_config()
                 except Exception as e:
-                    QMessageBox.critical(self, "错误", f"无法打开文件: {str(e)}")
+                    QMessageBox.critical(self, "Error", f"Cannot open file: {str(e)}")
 
 
-# 自定义事件类型，用于在线程间通信
-class TailLogEvent(QEvent):
-    EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
-    
-    def __init__(self, content: str):
-        super().__init__(self.EVENT_TYPE)
-        self.content = content
-
-
-# 重写事件处理方法，处理自定义事件
-def event(self, event: QEvent) -> bool:
-    if event.type() == TailLogEvent.EVENT_TYPE:
-        # 获取新内容
-        new_content = event.content
-        
-        # 将新内容按行分割
-        new_lines = new_content.splitlines(True)  # 保留换行符
-        
-        if new_lines:
-            # 应用过滤条件
-            filtered_content, match_count = self.filter_log_content(new_lines)
-            
-            if filtered_content:
-                # 追加过滤后的内容到结果文本框
-                self.result_text.append(filtered_content)
-                # 滚动到底部
-                self.result_text.verticalScrollBar().setValue(self.result_text.verticalScrollBar().maximum())
-                
-                # 更新状态栏
-                self.statusBar().showMessage(f"追加了 {match_count} 行匹配的日志")
-        
-        return True
-    return super(LogInsight, self).event(event)
-
-
-# 添加事件处理方法到类
-LogInsight.event = event
+# Main application entry point
 
 
 if __name__ == "__main__":

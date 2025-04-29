@@ -1,47 +1,47 @@
-# LogInsight - 日志查看工具
+# LogInsight - Log Viewer Tool
 
-本项目是一个查看日志文件的工具，基于Python和PyQt开发。提供了强大的日志文件查看、搜索和过滤功能，帮助用户快速定位和分析日志信息。
+This project is a log file viewing tool developed with Python and PyQt. It provides powerful log file viewing, searching, and filtering capabilities to help users quickly locate and analyze log information.
 
-## 技术规范
-- 使用Python 3.x
-- 使用PyQt 6库进行图形界面开发
-- 代码应当使用type hint
+## Technical Specifications
+- Uses Python 3.x
+- Uses PyQt 6 library for GUI development
+- Code implements type hints
 
-## 功能
-- 打开日志文件
-- 搜索关键字
-- 显示搜索结果
-- 复制搜索结果到剪贴板
-- 时间范围筛选（支持格式：HH:MM:SS.XXX）
-- 包含关键字过滤（支持多个关键字，以空格分隔，带空格的关键字可用双引号括住）
-- 排除关键字过滤（支持多个关键字，以空格分隔，带空格的关键字可用双引号括住）
-- 大小写敏感选项（包含关键字和排除关键字各自有独立的大小写敏感复选框）
-- 右键菜单支持（复制、全选、复制全部）
-- 记录当次打开的文件路径和选项，下次打开程序时能恢复上次打开的日志文件和搜索条件
-- 字体大小调整（使用Ctrl+鼠标滚轮可放大或缩小结果区域文本）
-- 结果区域内搜索功能（按Ctrl+F打开搜索框，支持关键字高亮和导航）
+## Features
+- Open log files
+- Search keywords
+- Display search results
+- Copy search results to clipboard
+- Time range filtering (supports format: HH:MM:SS.XXX)
+- Include keywords filter (supports multiple keywords, space-separated, keywords with spaces can be enclosed in double quotes)
+- Exclude keywords filter (supports multiple keywords, space-separated, keywords with spaces can be enclosed in double quotes)
+- Case sensitivity options (Include and exclude keywords each have independent case sensitivity checkboxes)
+- Right-click menu support (Copy, Select All, Copy All)
+- Remembers last opened file path and options, restores the last opened log file and search conditions when reopening the program
+- Font size adjustment (Use Ctrl+mouse wheel to zoom in/out text in the result area)
+- In-result area search function (Press Ctrl+F to open search dialog, supports keyword highlighting and navigation)
 
 
-## 使用方法
+## Usage Instructions
 
 ```
 python log_insight.py
 ```
 
-1. 点击"文件"菜单，选择"打开日志文件"
-2. 在搜索框中输入要搜索的关键字
-3. 设置过滤条件（可选）：
-   - 包含关键字：日志行必须包含至少一个包含关键字才会显示
-   - 排除关键字：日志行包含任一排除关键字将被过滤掉（优先级高于包含关键字）
-   - 大小写敏感：每个关键字文本框后有独立的"大小写敏感"复选框，勾选后关键字匹配将区分大小写
-   - 关键字之间用空格分隔，如果关键字本身包含空格，可以用双引号括住，如 "error message"
-   - 时间范围：限定日志的时间范围
-4. 点击"过滤日志"按钮执行搜索
-5. 在结果区域查看匹配的日志行
-6. 右键点击结果区域可以复制选中内容或全部内容
-7. 使用Ctrl+鼠标滚轮可以放大或缩小结果区域的文本字体大小
-8. 在结果区域中按Ctrl+F可以打开搜索对话框：
-   - 输入关键字后会自动高亮显示所有匹配项
-   - 按Enter键或点击"v"按钮跳转到下一个匹配项
-   - 按Shift+Enter键或点击"^"按钮跳转到上一个匹配项
-   - 按Esc键或点击"x"按钮关闭搜索对话框
+1. Click "File" menu, select "Open Log File"
+2. Enter search keywords in the search box
+3. Set filter conditions (optional):
+   - Include keywords: Log lines must contain at least one include keyword to be displayed
+   - Exclude keywords: Log lines containing any exclude keyword will be filtered out (takes precedence over include keywords)
+   - Case sensitive: Each keyword textbox has an independent "Case Sensitive" checkbox, when checked, keyword matching will be case sensitive
+   - Keywords are separated by spaces, if a keyword contains spaces, enclose it in double quotes, e.g., "error message"
+   - Time range: Limit the time range of logs
+4. Click "Filter Log" button to execute search
+5. View matching log lines in the result area
+6. Right-click in the result area to copy selected content or all content
+7. Use Ctrl+mouse wheel to zoom in/out text font size in the result area
+8. Press Ctrl+F in the result area to open search dialog:
+   - Entered keywords will be automatically highlighted
+   - Press Enter or click "v" button to jump to next match
+   - Press Shift+Enter or click "^" button to jump to previous match
+   - Press Esc or click "x" button to close search dialog
