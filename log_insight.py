@@ -5,7 +5,6 @@ import json
 import time
 from datetime import datetime
 from typing import List, Pattern, Optional, Tuple
-from threading import Thread, Event
 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QTextEdit, QFrame, QGroupBox,
@@ -14,7 +13,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
 from PyQt6.QtGui import (QFont, QWheelEvent, QIcon,
                          QDragEnterEvent, QDropEvent, QTextCursor, QTextCharFormat, QKeySequence,
                          QShortcut)
-from PyQt6.QtCore import Qt, QEvent, QTimer, QSize, QFileSystemWatcher
+from PyQt6.QtCore import Qt, QTimer, QSize, QFileSystemWatcher
 
 
 
@@ -28,6 +27,8 @@ class LogInsight(QMainWindow):
     APP_LOGO_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "logo.svg")
     ARROW_UP_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "arrow_up.svg")
     ARROW_DOWN_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "arrow_down.svg")
+    THEME_LIGHT_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "theme_light.svg")
+    THEME_DARK_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "theme_dark.svg")
     
     def __init__(self) -> None:
         super().__init__()
@@ -232,10 +233,14 @@ class LogInsight(QMainWindow):
         self.word_wrap_check.stateChanged.connect(self.toggle_word_wrap)
         self.buttons_layout.addWidget(self.word_wrap_check)
         
-        # Add theme toggle button
-        self.theme_toggle_check = QCheckBox("Toggle Theme")
-        self.theme_toggle_check.stateChanged.connect(self.toggle_theme)
-        self.buttons_layout.addWidget(self.theme_toggle_check)
+        # Add theme toggle button with icon
+        self.theme_toggle_btn = QToolButton()
+        self.theme_toggle_btn.setToolTip("切换主题")
+        self.theme_toggle_btn.setCheckable(True)
+        self.theme_toggle_btn.setIcon(QIcon(self.THEME_LIGHT_ICON))
+        self.theme_toggle_btn.setIconSize(QSize(20, 20))
+        self.theme_toggle_btn.toggled.connect(self.toggle_theme)
+        self.buttons_layout.addWidget(self.theme_toggle_btn)
         
         self.buttons_layout.addStretch()
         
@@ -306,16 +311,22 @@ class LogInsight(QMainWindow):
             self.exclude_case_sensitive.setIcon(self.case_sensitive_off_icon)
     
     # Add theme toggle method
-    def toggle_theme(self, state: int) -> None:
+    def toggle_theme(self, checked: bool) -> None:
         """Toggle theme mode
         
         Args:
-            state: Checkbox state
+            checked: Whether the button is checked
         """
-        if state == Qt.CheckState.Checked.value:
-            self.result_text.setStyleSheet("background-color: white; color: black;")
-        else:
+        if checked:
+            # Dark mode
+            self.theme_toggle_btn.setIcon(QIcon(self.THEME_DARK_ICON))
+            self.theme_toggle_btn.setToolTip("切换到亮色主题")
             self.result_text.setStyleSheet("background-color: black; color: white;")
+        else:
+            # Light mode
+            self.theme_toggle_btn.setIcon(QIcon(self.THEME_LIGHT_ICON))
+            self.theme_toggle_btn.setToolTip("切换到暗色主题")
+            self.result_text.setStyleSheet("background-color: white; color: black;")
     
     def open_log_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
@@ -1124,9 +1135,6 @@ class LogInsight(QMainWindow):
                     self.save_config()
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Cannot open file: {str(e)}")
-
-
-# Main application entry point
 
 
 if __name__ == "__main__":
