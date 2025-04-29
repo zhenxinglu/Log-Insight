@@ -26,6 +26,8 @@ class LogInsight(QMainWindow):
     CASE_SENSITIVE_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "case_sensitive_on.svg")
     CASE_SENSITIVE_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "case_sensitive_off.svg")
     APP_LOGO_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "logo.svg")
+    ARROW_UP_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "arrow_up.svg")
+    ARROW_DOWN_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "arrow_down.svg")
     
     def __init__(self) -> None:
         super().__init__()
@@ -558,14 +560,16 @@ class LogInsight(QMainWindow):
         
         # 创建上一个按钮
         self.prev_button = QToolButton()
-        self.prev_button.setText("^")
+        self.prev_button.setIcon(QIcon(self.ARROW_UP_ICON))
+        self.prev_button.setIconSize(QToolButton().sizeHint())
         self.prev_button.setToolTip("上一个匹配 (Shift+Enter)")
         self.prev_button.clicked.connect(lambda: self.navigate_search(-1))
         layout.addWidget(self.prev_button)
         
         # 创建下一个按钮
         self.next_button = QToolButton()
-        self.next_button.setText("v")
+        self.next_button.setIcon(QIcon(self.ARROW_DOWN_ICON))
+        self.next_button.setIconSize(QToolButton().sizeHint())
         self.next_button.setToolTip("下一个匹配 (Enter)")
         self.next_button.clicked.connect(lambda: self.navigate_search(1))
         layout.addWidget(self.next_button)
