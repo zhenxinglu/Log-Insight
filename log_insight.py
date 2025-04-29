@@ -37,6 +37,10 @@ class LogInsight(QMainWindow):
         self.tail_thread: Optional[Thread] = None
         self.current_font_size: int = 10
         
+        # 初始化折叠状态变量
+        self.filter_collapsed: bool = False
+        self.button_collapsed: bool = False
+        
         # 初始化搜索相关变量
         self.search_dialog = None
         self.search_matches: List[int] = []
@@ -66,17 +70,58 @@ class LogInsight(QMainWindow):
         self.setup_shortcuts()
     
     def setup_ui(self) -> None:
-        # 创建过滤器框架
-        self.filter_group = QGroupBox("过滤器")
-        self.main_layout.addWidget(self.filter_group)
+        # 创建控制面板框架（合并过滤器和操作区域）
+        self.control_group = QGroupBox()
+        self.main_layout.addWidget(self.control_group)
         
-        self.filter_layout = QGridLayout(self.filter_group)
+        # 创建控制面板布局
+        self.control_layout = QVBoxLayout(self.control_group)
+        self.control_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # 创建标题栏区域
+        self.title_widget = QWidget()
+        self.title_layout = QHBoxLayout(self.title_widget)
+        self.title_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 添加标题标签
+        self.control_title = QLabel("控制面板")
+        self.control_title.setStyleSheet("font-weight: bold;")
+        self.title_layout.addWidget(self.control_title)
+        
+        self.title_layout.addStretch()
+        
+        # 添加折叠/展开按钮
+        self.control_toggle_btn = QPushButton("▼")
+        self.control_toggle_btn.setToolTip("折叠/展开控制面板")
+        self.control_toggle_btn.setFixedSize(20, 20)  # 设置按钮大小
+        self.control_toggle_btn.clicked.connect(self.toggle_control_panel)
+        self.title_layout.addWidget(self.control_toggle_btn)
+        
+        # 将标题栏添加到控制面板布局
+        self.control_layout.addWidget(self.title_widget)
+        
+        # 创建控制面板内容区域
+        self.control_content_widget = QWidget()
+        self.control_content_layout = QVBoxLayout(self.control_content_widget)
+        self.control_content_layout.setContentsMargins(0, 0, 0, 0)
+        self.control_content_layout.setSpacing(5)  # 减少垂直间距
+        self.control_layout.addWidget(self.control_content_widget)
+        
+        # 创建过滤器部分
+        self.filter_widget = QWidget()
+        self.filter_layout = QGridLayout(self.filter_widget)
+        self.filter_layout.setContentsMargins(0, 0, 0, 0)
+        self.filter_layout.setVerticalSpacing(3)  # 减少垂直间距
+        
+        # 添加过滤器标题
+        self.filter_title = QLabel("<b>过滤器</b>")
+        self.filter_layout.addWidget(self.filter_title, 0, 0, 1, 3)
         
         # 包含关键字
-        self.filter_layout.addWidget(QLabel("包含关键字:"), 0, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.filter_layout.addWidget(QLabel("包含关键字:"), 1, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         self.include_entry = QLineEdit()
         self.include_entry.setPlaceholderText("keyword1 \"multiple words keywords\" keyword3")
-        self.filter_layout.addWidget(self.include_entry, 0, 1)
+        self.filter_layout.addWidget(self.include_entry, 1, 1)
         
         # 包含关键字大小写敏感开关
         self.include_case_frame = QWidget()
@@ -85,13 +130,13 @@ class LogInsight(QMainWindow):
         
         self.include_case_sensitive = QCheckBox("大小写敏感")
         self.include_case_layout.addWidget(self.include_case_sensitive)
-        self.filter_layout.addWidget(self.include_case_frame, 0, 2)
+        self.filter_layout.addWidget(self.include_case_frame, 1, 2)
         
         # 排除关键字
-        self.filter_layout.addWidget(QLabel("排除关键字:"), 1, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.filter_layout.addWidget(QLabel("排除关键字:"), 2, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         self.exclude_entry = QLineEdit()
         self.exclude_entry.setPlaceholderText("keyword1 \"multiple words keywords\" keyword3")
-        self.filter_layout.addWidget(self.exclude_entry, 1, 1)
+        self.filter_layout.addWidget(self.exclude_entry, 2, 1)
         
         # 排除关键字大小写敏感开关
         self.exclude_case_frame = QWidget()
@@ -100,10 +145,10 @@ class LogInsight(QMainWindow):
         
         self.exclude_case_sensitive = QCheckBox("大小写敏感")
         self.exclude_case_layout.addWidget(self.exclude_case_sensitive)
-        self.filter_layout.addWidget(self.exclude_case_frame, 1, 2)
+        self.filter_layout.addWidget(self.exclude_case_frame, 2, 2)
         
         # 时间范围
-        self.filter_layout.addWidget(QLabel("时间范围:"), 2, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.filter_layout.addWidget(QLabel("时间范围:"), 3, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         
         self.time_frame = QWidget()
         self.time_layout = QHBoxLayout(self.time_frame)
@@ -123,38 +168,60 @@ class LogInsight(QMainWindow):
         self.end_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
         self.time_layout.addWidget(self.end_time_entry)
         
-        self.filter_layout.addWidget(self.time_frame, 2, 1)
+        self.filter_layout.addWidget(self.time_frame, 3, 1)
         
-        # 按钮框架
-        self.button_frame = QWidget()
-        self.button_layout = QHBoxLayout(self.button_frame)
+        # 添加过滤器部分到控制面板
+        self.control_content_layout.addWidget(self.filter_widget)
+        
+        # 添加分隔线
+        self.separator = QFrame()
+        self.separator.setFrameShape(QFrame.Shape.HLine)
+        self.separator.setFrameShadow(QFrame.Shadow.Sunken)
+        self.control_content_layout.addWidget(self.separator)
+        
+        # 创建操作部分
+        self.button_widget = QWidget()
+        self.button_layout = QVBoxLayout(self.button_widget)
         self.button_layout.setContentsMargins(0, 0, 0, 0)
+        self.button_layout.setSpacing(3)  # 减少垂直间距
+        
+        # 添加操作标题
+        self.button_title = QLabel("<b>操作</b>")
+        self.button_layout.addWidget(self.button_title)
+        
+        # 创建按钮内容区域
+        self.button_frame = QWidget()
+        self.buttons_layout = QHBoxLayout(self.button_frame)
+        self.buttons_layout.setContentsMargins(0, 0, 0, 0)
         
         self.search_button = QPushButton("过滤日志")
         self.search_button.clicked.connect(self.search_log)
-        self.button_layout.addWidget(self.search_button)
+        self.buttons_layout.addWidget(self.search_button)
         
         self.tail_log_check = QCheckBox("Tail Log")
         self.tail_log_check.stateChanged.connect(self.toggle_tail_log)
-        self.button_layout.addWidget(self.tail_log_check)
+        self.buttons_layout.addWidget(self.tail_log_check)
         
         self.word_wrap_check = QCheckBox("Word Wrap")
         self.word_wrap_check.setChecked(True)
         self.word_wrap_check.stateChanged.connect(self.toggle_word_wrap)
-        self.button_layout.addWidget(self.word_wrap_check)
+        self.buttons_layout.addWidget(self.word_wrap_check)
         
         # 新增主题切换按钮
         self.theme_toggle_check = QCheckBox("切换主题")
         self.theme_toggle_check.stateChanged.connect(self.toggle_theme)
-        self.button_layout.addWidget(self.theme_toggle_check)
+        self.buttons_layout.addWidget(self.theme_toggle_check)
         
-        self.button_layout.addStretch()
+        self.buttons_layout.addStretch()
         
         self.open_button = QPushButton("打开日志文件")
         self.open_button.clicked.connect(self.open_log_file)
-        self.button_layout.addWidget(self.open_button)
+        self.buttons_layout.addWidget(self.open_button)
         
-        self.main_layout.addWidget(self.button_frame)
+        self.button_layout.addWidget(self.button_frame)
+        
+        # 添加操作部分到控制面板
+        self.control_content_layout.addWidget(self.button_widget)
         
         # 结果显示区域
         self.result_group = QGroupBox("搜索结果")
@@ -173,6 +240,23 @@ class LogInsight(QMainWindow):
         
         # 状态栏
         self.statusBar().showMessage("就绪")
+    
+    # 折叠/展开控制面板
+    def toggle_control_panel(self) -> None:
+        """折叠或展开控制面板（包含过滤器和操作区域）
+        """
+        # 使用原有的折叠状态变量，保持兼容性
+        self.filter_collapsed = not self.filter_collapsed
+        self.button_collapsed = self.filter_collapsed  # 保持两个状态同步
+        
+        # 更新按钮文本
+        self.control_toggle_btn.setText("▶" if self.filter_collapsed else "▼")
+        
+        # 隐藏或显示控制面板内容
+        self.control_content_widget.setVisible(not self.filter_collapsed)
+        
+        # 调整窗口大小以适应内容变化
+        self.adjustSize()
     
     # 新增主题切换方法
     def toggle_theme(self, state: int) -> None:
@@ -850,6 +934,19 @@ class LogInsight(QMainWindow):
                 self.theme_toggle_check.setChecked(config["theme"])
                 self.toggle_theme(Qt.CheckState.Checked.value if config["theme"] else Qt.CheckState.Unchecked.value)
                 
+            # 恢复折叠状态
+            if "filter_collapsed" in config:
+                self.filter_collapsed = config["filter_collapsed"]
+                if self.filter_collapsed:
+                    self.filter_toggle_btn.setText("▶")
+                    self.filter_content_widget.setVisible(False)
+                    
+            if "button_collapsed" in config:
+                self.button_collapsed = config["button_collapsed"]
+                if self.button_collapsed:
+                    self.button_toggle_btn.setText("▶")
+                    self.button_frame.setVisible(False)
+                
             # 恢复上次打开的文件
             if "last_file" in config and config["last_file"] and os.path.exists(config["last_file"]):
                 self.current_file = config["last_file"]
@@ -875,7 +972,9 @@ class LogInsight(QMainWindow):
             "word_wrap": self.word_wrap_check.isChecked(),
             "font_size": self.current_font_size,
             "last_file": self.current_file if self.current_file else "",
-            "theme": self.theme_toggle_check.isChecked()  # 新增主题配置
+            "theme": self.theme_toggle_check.isChecked(),  # 新增主题配置
+            "filter_collapsed": self.filter_collapsed,  # 保存过滤器折叠状态
+            "button_collapsed": self.button_collapsed  # 保存按钮区域折叠状态
         }
         
         try:
