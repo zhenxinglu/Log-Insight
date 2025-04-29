@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QPushButton, QCheckBox, QFileDialog, QMessageBox, QMenu,
                              QGridLayout, QDialog, QToolButton)
 from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer
-from PyQt6.QtGui import (QFont, QWheelEvent, QIcon, QImage, QContextMenuEvent,
+from PyQt6.QtGui import (QFont, QWheelEvent, 
                          QDragEnterEvent, QDropEvent, QTextCursor, QTextCharFormat, QKeySequence,
                          QShortcut)
 
@@ -255,8 +255,7 @@ class LogInsight(QMainWindow):
         # 隐藏或显示控制面板内容
         self.control_content_widget.setVisible(not self.filter_collapsed)
         
-        # 调整窗口大小以适应内容变化
-        self.adjustSize()
+        # 移除adjustSize调用，防止窗口大小变化
     
     # 新增主题切换方法
     def toggle_theme(self, state: int) -> None:
