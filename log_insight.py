@@ -3,14 +3,12 @@ import re
 import os
 import json
 import time
-import pyperclip
 from datetime import datetime
 from typing import List, Pattern, Optional, Any, Dict, Tuple, Union
 from threading import Thread, Event
-from PIL import Image, ImageDraw
 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QLabel, QLineEdit, QTextEdit, QScrollBar, QFrame, QGroupBox,
+                             QLabel, QLineEdit, QTextEdit, QFrame, QGroupBox,
                              QPushButton, QCheckBox, QFileDialog, QMessageBox, QMenu,
                              QGridLayout, QDialog, QToolButton)
 from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QTimer
@@ -121,6 +119,8 @@ class LogInsight(QMainWindow):
         self.filter_layout.addWidget(QLabel("包含关键字:"), 1, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         self.include_entry = QLineEdit()
         self.include_entry.setPlaceholderText("keyword1 \"multiple words keywords\" keyword3")
+        # 添加回车键事件处理
+        self.include_entry.returnPressed.connect(self.search_log)
         self.filter_layout.addWidget(self.include_entry, 1, 1)
         
         # 包含关键字大小写敏感开关
@@ -136,6 +136,8 @@ class LogInsight(QMainWindow):
         self.filter_layout.addWidget(QLabel("排除关键字:"), 2, 0, alignment=Qt.AlignmentFlag.AlignLeft)
         self.exclude_entry = QLineEdit()
         self.exclude_entry.setPlaceholderText("keyword1 \"multiple words keywords\" keyword3")
+        # 添加回车键事件处理
+        self.exclude_entry.returnPressed.connect(self.search_log)
         self.filter_layout.addWidget(self.exclude_entry, 2, 1)
         
         # 排除关键字大小写敏感开关
@@ -158,6 +160,8 @@ class LogInsight(QMainWindow):
         self.start_time_entry.setPlaceholderText("00:00:00.000")
         # 设置placeholder样式，使其更加明显
         self.start_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
+        # 添加回车键事件处理
+        self.start_time_entry.returnPressed.connect(self.search_log)
         self.time_layout.addWidget(self.start_time_entry)
         
         self.time_layout.addWidget(QLabel("至"))
@@ -166,6 +170,8 @@ class LogInsight(QMainWindow):
         self.end_time_entry.setPlaceholderText("23:59:59.999")
         # 设置placeholder样式，使其更加明显
         self.end_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
+        # 添加回车键事件处理
+        self.end_time_entry.returnPressed.connect(self.search_log)
         self.time_layout.addWidget(self.end_time_entry)
         
         self.filter_layout.addWidget(self.time_frame, 3, 1)
@@ -936,15 +942,12 @@ class LogInsight(QMainWindow):
             # 恢复折叠状态
             if "filter_collapsed" in config:
                 self.filter_collapsed = config["filter_collapsed"]
+                self.button_collapsed = self.filter_collapsed  # 保持两个状态同步
+                
+                # 更新控制面板折叠状态
                 if self.filter_collapsed:
-                    self.filter_toggle_btn.setText("▶")
-                    self.filter_content_widget.setVisible(False)
-                    
-            if "button_collapsed" in config:
-                self.button_collapsed = config["button_collapsed"]
-                if self.button_collapsed:
-                    self.button_toggle_btn.setText("▶")
-                    self.button_frame.setVisible(False)
+                    self.control_toggle_btn.setText("▶")
+                    self.control_content_widget.setVisible(False)
                 
             # 恢复上次打开的文件
             if "last_file" in config and config["last_file"] and os.path.exists(config["last_file"]):
