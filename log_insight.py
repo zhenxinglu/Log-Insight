@@ -943,7 +943,6 @@ class LogInsight(QMainWindow):
                             # Scroll to bottom
                             self.result_text.verticalScrollBar().setValue(self.result_text.verticalScrollBar().maximum())
                             
-                            # Update status bar
                             self.statusBar().showMessage(f"Appended {match_count} matching log lines")
                 
                 # Re-add the file to the watcher if it was removed (happens on some systems when file is modified)
@@ -953,34 +952,33 @@ class LogInsight(QMainWindow):
             print(f"File change handling error: {str(e)}")
     
     def parse_keywords(self, input_str: str) -> List[str]:
-        """解析关键字，支持空格分隔和引号包含空格的关键字
-        
+        """parse keywords, support space separation and keywords with spaces inside quotes
         Args:
-            input_str: 输入的关键字字符串
-            
+            input_str: Input keyword string
+
         Returns:
-            解析后的关键字列表
+            Parsed keyword list
         """
+        
         if not input_str:
             return []
             
         keywords: List[str] = []
-        # 正则表达式匹配：引号内的内容作为一个关键字，或者非空格字符序列作为关键字
+        # regular expression matching: content inside quotes as a keyword, or non-space character sequence as a keyword
         pattern: Pattern = re.compile(r'"([^"]*)"|\S+')
         
         matches = pattern.finditer(input_str)
         for match in matches:
-            # 如果是引号内的内容，group(1)会有值
+            # if it's inside quotes, group(1) will have a value
             if match.group(1) is not None:
                 keywords.append(match.group(1))
             else:
-                # 否则使用完整匹配
+                # otherwise, use the full match
                 keywords.append(match.group(0))
                 
         return [keyword.strip() for keyword in keywords if keyword.strip()]
     
     def load_config(self) -> None:
-        """从配置文件加载配置"""
         if not os.path.exists(self.CONFIG_FILE):
             return
             
@@ -988,7 +986,7 @@ class LogInsight(QMainWindow):
             with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
                 config = json.load(f)
                 
-            # 恢复搜索条件
+            # restore search conditions
             if "include_keywords" in config and config["include_keywords"]:
                 self.include_entry.setText(config["include_keywords"])
                 
@@ -1001,41 +999,41 @@ class LogInsight(QMainWindow):
             if "end_time" in config and config["end_time"]:
                 self.end_time_entry.setText(config["end_time"])
                 
-            # 恢复大小写敏感设置
+            # restore case sensitive settings
             if "include_case_sensitive" in config:
                 self.include_case_sensitive.setChecked(config["include_case_sensitive"])
                 
             if "exclude_case_sensitive" in config:
                 self.exclude_case_sensitive.setChecked(config["exclude_case_sensitive"])
                 
-            # 恢复自动换行设置
+            # restore word wrap setting
             if "word_wrap" in config:
                 self.word_wrap_check.setChecked(config["word_wrap"])
                 self.toggle_word_wrap(Qt.CheckState.Checked.value if config["word_wrap"] else Qt.CheckState.Unchecked.value)
                 
-            # 恢复字体大小
+            # restore font size
             if "font_size" in config:
                 self.current_font_size = config["font_size"]
                 font = self.result_text.font()
                 font.setPointSize(self.current_font_size)
                 self.result_text.setFont(font)
                 
-            # 恢复主题设置
+            # restore theme setting
             if "theme" in config:
                 self.theme_toggle_btn.setChecked(config["theme"])
                 self.toggle_theme(config["theme"])
                 
-            # 恢复折叠状态
+            # restore filter_collapsed setting
             if "filter_collapsed" in config:
                 self.filter_collapsed = config["filter_collapsed"]
-                self.button_collapsed = self.filter_collapsed  # 保持两个状态同步
+                self.button_collapsed = self.filter_collapsed  # synchronize two states
                 
-                # 更新控制面板折叠状态
+                # update control panel
                 if self.filter_collapsed:
                     self.control_toggle_btn.setText("▶")
                     self.control_content_widget.setVisible(False)
                 
-            # 恢复上次打开的文件
+            # restore last open file
             if "last_file" in config and config["last_file"] and os.path.exists(config["last_file"]):
                 self.current_file = config["last_file"]
                 with open(self.current_file, 'r', encoding='utf-8', errors='ignore') as file:
@@ -1045,7 +1043,7 @@ class LogInsight(QMainWindow):
                 self.setWindowTitle(f"Log Insight - {self.current_file}")
                 self.result_text.setText("".join(self.log_content))
                 
-                # 如果启用了tail模式，将文件添加到监视器
+                # add file to watcher if tail mode is enabled
                 if self.tail_log_check.isChecked():
                     self.file_watcher.addPath(self.current_file)
                 
