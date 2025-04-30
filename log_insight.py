@@ -170,24 +170,40 @@ class LogInsight(QMainWindow):
         self.time_frame = QWidget()
         self.time_layout = QHBoxLayout(self.time_frame)
         self.time_layout.setContentsMargins(0, 0, 0, 0)
+        self.time_layout.setSpacing(5)  # Set fixed spacing between widgets
         
         self.start_time_entry = QLineEdit()
         self.start_time_entry.setPlaceholderText("00:00:00.000")
+        # Set fixed width to prevent the input box from being too wide
+        self.start_time_entry.setFixedWidth(100)
         # Set placeholder style to make it more visible
         self.start_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
         # Add enter key event handler
         self.start_time_entry.returnPressed.connect(self.search_log)
+        # Add text changed handler for real-time validation
+        self.start_time_entry.textChanged.connect(self.validate_start_time)
         self.time_layout.addWidget(self.start_time_entry)
         
-        self.time_layout.addWidget(QLabel("to"))
+        # Use a fixed width label for the "to" text
+        self.time_separator_label = QLabel("to")
+        self.time_separator_label.setFixedWidth(20)  # Set fixed width for the label
+        self.time_separator_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center the text
+        self.time_layout.addWidget(self.time_separator_label)
         
         self.end_time_entry = QLineEdit()
         self.end_time_entry.setPlaceholderText("23:59:59.999")
+        # Set fixed width to prevent the input box from being too wide
+        self.end_time_entry.setFixedWidth(100)
         # Set placeholder style to make it more visible
         self.end_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
         # Add enter key event handler
         self.end_time_entry.returnPressed.connect(self.search_log)
+        # Add text changed handler for real-time validation
+        self.end_time_entry.textChanged.connect(self.validate_end_time)
         self.time_layout.addWidget(self.end_time_entry)
+        
+        # Add stretch at the end to push everything to the left
+        self.time_layout.addStretch()
         
         self.filter_layout.addWidget(self.time_frame, 3, 1)
         
@@ -230,7 +246,7 @@ class LogInsight(QMainWindow):
         
         # Add theme toggle button with icon
         self.theme_toggle_btn = QToolButton()
-        self.theme_toggle_btn.setToolTip("切换主题")
+        #self.theme_toggle_btn.setToolTip("切换主题")
         self.theme_toggle_btn.setCheckable(True)
         self.theme_toggle_btn.setIcon(QIcon(self.THEME_LIGHT_ICON))
         self.theme_toggle_btn.setIconSize(QSize(20, 20))
@@ -323,6 +339,49 @@ class LogInsight(QMainWindow):
             self.theme_toggle_btn.setToolTip("switch to dark theme")
             self.result_text.setStyleSheet("background-color: white; color: black;")
     
+    def validate_time_format(self, time_str: str) -> bool:
+        """Validate if the time string matches the required format
+        
+        Args:
+            time_str: Time string to validate
+            
+        Returns:
+            True if the format is valid, False otherwise
+        """
+        if not time_str.strip():
+            return True  # Empty string is valid (no filter)
+            
+        time_format = "%H:%M:%S.%f"
+        try:
+            datetime.strptime(time_str, time_format)
+            return True
+        except ValueError:
+            return False
+    
+    def validate_start_time(self) -> None:
+        """Validate start time format and provide visual feedback"""
+        time_str = self.start_time_entry.text().strip()
+        if self.validate_time_format(time_str):
+            # Valid format - reset to normal style
+            self.start_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
+            self.start_time_entry.setToolTip("")
+        else:
+            # Invalid format - highlight with red background
+            self.start_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; background-color: #FFDDDD; border: 1px solid #FF0000; } QLineEdit::placeholder { color: #888; font-style: italic; }")
+            self.start_time_entry.setToolTip("Invalid time format! Please use format: HH:MM:SS.mmm")
+    
+    def validate_end_time(self) -> None:
+        """Validate end time format and provide visual feedback"""
+        time_str = self.end_time_entry.text().strip()
+        if self.validate_time_format(time_str):
+            # Valid format - reset to normal style
+            self.end_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
+            self.end_time_entry.setToolTip("")
+        else:
+            # Invalid format - highlight with red background
+            self.end_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; background-color: #FFDDDD; border: 1px solid #FF0000; } QLineEdit::placeholder { color: #888; font-style: italic; }")
+            self.end_time_entry.setToolTip("Invalid time format! Please use format: HH:MM:SS.mmm")
+    
     def open_log_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -344,7 +403,7 @@ class LogInsight(QMainWindow):
                 self.statusBar().showMessage(f"File loaded: {os.path.basename(file_path)} - {len(self.log_content)} lines")
                 self.clear_results()
                 # Update window title to show file path
-                self.setWindowTitle(f"LogInsight - {file_path}")
+                self.setWindowTitle(f"Log Insight - {file_path}")
                 
                 # Display log content in results area
                 self.result_text.setText("".join(self.log_content))
@@ -406,19 +465,25 @@ class LogInsight(QMainWindow):
         start_datetime: Optional[datetime] = None
         end_datetime: Optional[datetime] = None
         
-        if start_time:
-            try:
-                start_datetime = datetime.strptime(start_time, time_format)
-                use_time_filter = True
-            except ValueError:
-                return "Invalid start time format, please use format: " + time_format, 0
+        # Validate start time format
+        if start_time and not self.validate_time_format(start_time):
+            # Highlight the input field with error style
+            self.start_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; background-color: #FFDDDD; border: 1px solid #FF0000; } QLineEdit::placeholder { color: #888; font-style: italic; }")
+            self.start_time_entry.setToolTip("Invalid time format! Please use format: HH:MM:SS.mmm")
+            return "Invalid start time format, please use format: " + time_format, 0
+        elif start_time:
+            start_datetime = datetime.strptime(start_time, time_format)
+            use_time_filter = True
         
-        if end_time:
-            try:
-                end_datetime = datetime.strptime(end_time, time_format)
-                use_time_filter = True
-            except ValueError:
-                return "Invalid end time format, please use format: " + time_format, 0
+        # Validate end time format
+        if end_time and not self.validate_time_format(end_time):
+            # Highlight the input field with error style
+            self.end_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; background-color: #FFDDDD; border: 1px solid #FF0000; } QLineEdit::placeholder { color: #888; font-style: italic; }")
+            self.end_time_entry.setToolTip("Invalid time format! Please use format: HH:MM:SS.mmm")
+            return "Invalid end time format, please use format: " + time_format, 0
+        elif end_time:
+            end_datetime = datetime.strptime(end_time, time_format)
+            use_time_filter = True
         
         # Time regex pattern (matches HH:MM:SS.XXX at line start)
         time_pattern: Pattern = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d{3})')
@@ -472,6 +537,16 @@ class LogInsight(QMainWindow):
         
         # Apply filter conditions
         result_text, match_count = self.filter_log_content(self.log_content)
+        
+        # Reset time input styles if search was successful
+        if isinstance(result_text, str) and not result_text.startswith("Invalid"):
+            # Reset start time input style
+            self.start_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
+            self.start_time_entry.setToolTip("")
+            
+            # Reset end time input style
+            self.end_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; } QLineEdit::placeholder { color: #888; font-style: italic; }")
+            self.end_time_entry.setToolTip("")
         
         if match_count == 0:
             self.result_text.setText("No matching results found.\n")
@@ -1111,7 +1186,6 @@ class LogInsight(QMainWindow):
                     self.current_file = file_path
                     self.statusBar().showMessage(f"File loaded: {os.path.basename(file_path)} - {len(self.log_content)} lines")
                     self.clear_results()
-                    # Update window title to show file path
                     self.setWindowTitle(f"LogInsight - {file_path}")
                     
                     # Display log content in results area
