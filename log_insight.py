@@ -63,7 +63,6 @@ class LogInsight(QMainWindow):
         self.case_sensitive_on_icon = QIcon(self.CASE_SENSITIVE_ON_ICON)
         self.case_sensitive_off_icon = QIcon(self.CASE_SENSITIVE_OFF_ICON)
         
-        # 创建中央部件
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         
@@ -76,20 +75,16 @@ class LogInsight(QMainWindow):
         self.setup_shortcuts()
     
     def setup_ui(self) -> None:
-        # 创建控制面板框架（合并过滤器和操作区域）
         self.control_group = QGroupBox()
         self.main_layout.addWidget(self.control_group)
         
-        # 创建控制面板布局
         self.control_layout = QVBoxLayout(self.control_group)
         self.control_layout.setContentsMargins(5, 5, 5, 5)
         
-        # 创建标题栏区域
         self.title_widget = QWidget()
         self.title_layout = QHBoxLayout(self.title_widget)
         self.title_layout.setContentsMargins(0, 0, 0, 0)
         
-        # 添加标题标签
         self.control_title = QLabel("Control Panel")
         self.control_title.setStyleSheet("font-weight: bold;")
         self.title_layout.addWidget(self.control_title)
@@ -320,12 +315,12 @@ class LogInsight(QMainWindow):
         if checked:
             # Dark mode
             self.theme_toggle_btn.setIcon(QIcon(self.THEME_DARK_ICON))
-            self.theme_toggle_btn.setToolTip("切换到亮色主题")
+            self.theme_toggle_btn.setToolTip("switch to light theme")
             self.result_text.setStyleSheet("background-color: black; color: white;")
         else:
             # Light mode
             self.theme_toggle_btn.setIcon(QIcon(self.THEME_LIGHT_ICON))
-            self.theme_toggle_btn.setToolTip("切换到暗色主题")
+            self.theme_toggle_btn.setToolTip("switch to dark theme")
             self.result_text.setStyleSheet("background-color: white; color: black;")
     
     def open_log_file(self) -> None:
@@ -373,24 +368,23 @@ class LogInsight(QMainWindow):
         Returns:
             Tuple of filtered text content and number of matches
         """
-        # 解析包含关键字
+        # parse include keywords
         include_input: str = self.include_entry.text().strip()
         include_terms: List[str] = self.parse_keywords(include_input)
         
-        # 解析排除关键字
+        # parse exclude keywords
         exclude_input: str = self.exclude_entry.text().strip()
         exclude_terms: List[str] = self.parse_keywords(exclude_input)
         
         start_time: str = self.start_time_entry.text().strip()
         end_time: str = self.end_time_entry.text().strip()
         
-        # 根据大小写敏感设置编译正则表达式
         include_case_sensitive: bool = self.include_case_sensitive.isChecked()
         exclude_case_sensitive: bool = self.exclude_case_sensitive.isChecked()
         
         include_patterns: List[Pattern] = []
         for term in include_terms:
-            # 将关键字作为普通字符串处理，而不是正则表达式
+            # consider it as normal string, rather than regular expression 
             escaped_term = re.escape(term)
             if include_case_sensitive:
                 include_patterns.append(re.compile(escaped_term))
@@ -399,14 +393,14 @@ class LogInsight(QMainWindow):
         
         exclude_patterns: List[Pattern] = []
         for term in exclude_terms:
-            # 将关键字作为普通字符串处理，而不是正则表达式
+            # consider it as normal string, rather than regular expression 
             escaped_term = re.escape(term)
             if exclude_case_sensitive:
                 exclude_patterns.append(re.compile(escaped_term))
             else:
                 exclude_patterns.append(re.compile(escaped_term, re.IGNORECASE))
         
-        # 时间格式检查
+        
         time_format: str = "%H:%M:%S.%f"
         use_time_filter: bool = False
         start_datetime: Optional[datetime] = None
@@ -574,14 +568,14 @@ class LogInsight(QMainWindow):
         self.search_entry = QLineEdit()
         self.search_entry.setPlaceholderText("search...")
         self.search_entry.textChanged.connect(self.search_text_changed)
-        self.search_entry.returnPressed.connect(lambda: self.navigate_search(1))  # Press Enter to find next
+        # F3 shortcut will be used instead of Enter
         layout.addWidget(self.search_entry)
         
         # Create previous button
         self.prev_button = QToolButton()
         self.prev_button.setIcon(QIcon(self.ARROW_UP_ICON))
         self.prev_button.setIconSize(QSize(16, 16))  # Fixed icon size
-        self.prev_button.setToolTip("Previous Match (Shift+Enter)")
+        self.prev_button.setToolTip("Previous Match (Shift+F3)")
         self.prev_button.clicked.connect(lambda: self.navigate_search(-1))
         self.prev_button.setFixedSize(24, 24)  # Fixed button size
         layout.addWidget(self.prev_button)
@@ -590,7 +584,7 @@ class LogInsight(QMainWindow):
         self.next_button = QToolButton()
         self.next_button.setIcon(QIcon(self.ARROW_DOWN_ICON))
         self.next_button.setIconSize(QSize(16, 16))  # Fixed icon size
-        self.next_button.setToolTip("Next Match (Enter)")
+        self.next_button.setToolTip("Next Match (F3)")
         self.next_button.clicked.connect(lambda: self.navigate_search(1))
         self.next_button.setFixedSize(24, 24)  # Fixed button size
         layout.addWidget(self.next_button)
@@ -602,30 +596,32 @@ class LogInsight(QMainWindow):
         self.close_button.clicked.connect(self.close_search_dialog)
         layout.addWidget(self.close_button)
         
-        # 设置对话框位置 - 在结果区域的右上角
+        # set the dialog position - at the top right corner of the result area
         result_rect = self.result_group.geometry()
         dialog_pos = self.result_group.mapToGlobal(result_rect.topRight())
-        dialog_pos.setX(dialog_pos.x() - self.search_dialog.sizeHint().width() - 10)  # 向左偏移
-        dialog_pos.setY(dialog_pos.y() + 10)  # 向下偏移
+        dialog_pos.setX(dialog_pos.x() - self.search_dialog.sizeHint().width() - 10) 
+        dialog_pos.setY(dialog_pos.y() + 10)  
         self.search_dialog.move(dialog_pos)
         
-        # 显示对话框并设置焦点
         self.search_dialog.show()
         self.search_entry.setFocus()
         
-        # 添加ESC键关闭对话框
+        # Press ESC键 to clase dialog
         self.esc_shortcut = QShortcut(QKeySequence("Esc"), self.search_dialog)
         self.esc_shortcut.activated.connect(self.close_search_dialog)
         
-        # Add Shift+Enter shortcut to find previous match
-        self.prev_shortcut = QShortcut(QKeySequence("Shift+Return"), self.search_dialog)
+        # Add F3 shortcut to find next match
+        self.next_shortcut = QShortcut(QKeySequence("F3"), self.search_dialog)
+        self.next_shortcut.activated.connect(lambda: self.navigate_search(1))
+        
+        # Add Shift+F3 shortcut to find previous match
+        self.prev_shortcut = QShortcut(QKeySequence("Shift+F3"), self.search_dialog)
         self.prev_shortcut.activated.connect(lambda: self.navigate_search(-1))
     
     def close_search_dialog(self) -> None:
         """Close search dialog"""
         if self.search_dialog:
             self.search_dialog.close()
-            # Clear all highlights
             self.clear_highlights()
     
     def search_text_changed(self) -> None:
@@ -637,14 +633,13 @@ class LogInsight(QMainWindow):
             self.current_match_index = -1
             return
         
-        # Find all matches
         self.find_all_matches(search_text)
         
         # No need to update status bar here as find_all_matches already does it
     
     def find_all_matches(self, search_text: str) -> None:
         """Find all matching positions using batch processing to avoid UI freezing"""
-        # Clear previous highlights
+
         self.clear_highlights()
         
         # Reset match list
@@ -795,8 +790,6 @@ class LogInsight(QMainWindow):
                 highlight_count += 1
     
     def clear_highlights(self) -> None:
-        """清除所有高亮"""
-        # 重置文档格式
         cursor = QTextCursor(self.result_text.document())
         cursor.select(QTextCursor.SelectionType.Document)
         cursor.setCharFormat(QTextCharFormat())
@@ -808,14 +801,14 @@ class LogInsight(QMainWindow):
         Args:
             event: 鼠标事件对象
         """
-        # 检查是否按下了Ctrl键
+        # check if Ctrl is pressed
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             delta = event.angleDelta().y()
             if delta > 0:
-                # 增大字体
-                self.current_font_size = min(36, self.current_font_size + 1)  # 设置最大字体大小为36
+                # increase font size
+                self.current_font_size = min(36, self.current_font_size + 1)  # set maximum font size to 36
             else:
-                # 减小字体
+                # decrease font size
                 self.current_font_size = max(6, self.current_font_size - 1)  # Set minimum font size to 6
             
             # Update text box font
@@ -823,7 +816,6 @@ class LogInsight(QMainWindow):
             font.setPointSize(self.current_font_size)
             self.result_text.setFont(font)
             
-            # Update status bar
             self.statusBar().showMessage(f"Font size: {self.current_font_size}")
             
             # Handle event
@@ -1030,8 +1022,8 @@ class LogInsight(QMainWindow):
                 
             # 恢复主题设置
             if "theme" in config:
-                self.theme_toggle_check.setChecked(config["theme"])
-                self.toggle_theme(Qt.CheckState.Checked.value if config["theme"] else Qt.CheckState.Unchecked.value)
+                self.theme_toggle_btn.setChecked(config["theme"])
+                self.toggle_theme(config["theme"])
                 
             # 恢复折叠状态
             if "filter_collapsed" in config:
@@ -1072,7 +1064,7 @@ class LogInsight(QMainWindow):
             "word_wrap": self.word_wrap_check.isChecked(),
             "font_size": self.current_font_size,
             "last_file": self.current_file if self.current_file else "",
-            "theme": self.theme_toggle_check.isChecked(),  # Add theme configuration
+            "theme": self.theme_toggle_btn.isChecked(),  # Add theme configuration
             "filter_collapsed": self.filter_collapsed,  # Save filter collapse state
             "button_collapsed": self.button_collapsed  # Save button area collapse state
         }
