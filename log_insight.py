@@ -30,6 +30,8 @@ class LogInsight(QMainWindow):
     THEME_LIGHT_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "theme_light.svg")
     WORD_WRAP_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "word_wrap_on.svg")
     WORD_WRAP_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "word_wrap_off.svg")
+    TAIL_LOG_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "tail_log_on.svg")
+    TAIL_LOG_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "tail_log_off.svg")
     THEME_DARK_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "theme_dark.svg")
     
     def __init__(self) -> None:
@@ -237,9 +239,14 @@ class LogInsight(QMainWindow):
         self.search_button.clicked.connect(self.search_log)
         self.buttons_layout.addWidget(self.search_button)
         
-        self.tail_log_check = QCheckBox("Tail Log")
-        self.tail_log_check.stateChanged.connect(self.toggle_tail_log)
-        self.buttons_layout.addWidget(self.tail_log_check)
+        # 使用SVG图标替代Tail Log复选框
+        self.tail_log_btn = QToolButton()
+        self.tail_log_btn.setToolTip("Tail Log")
+        self.tail_log_btn.setCheckable(True)
+        self.tail_log_btn.setIcon(QIcon(self.TAIL_LOG_OFF_ICON))
+        self.tail_log_btn.setIconSize(QSize(20, 20))
+        self.tail_log_btn.toggled.connect(self.toggle_tail_log)
+        self.buttons_layout.addWidget(self.tail_log_btn)
         
         # 使用SVG图标替代Word Wrap复选框
         self.word_wrap_btn = QToolButton()
@@ -416,7 +423,7 @@ class LogInsight(QMainWindow):
                 self.result_text.setText("".join(self.log_content))
                 
                 # Add file to watcher if tail mode is active
-                if self.tail_log_check.isChecked():
+                if self.tail_log_btn.isChecked():
                     self.file_watcher.addPath(self.current_file)
                 
                 # Save current configuration
@@ -964,22 +971,28 @@ class LogInsight(QMainWindow):
             self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
             self.word_wrap_btn.setIcon(QIcon(self.WORD_WRAP_OFF_ICON))
     
-    def toggle_tail_log(self, state: int) -> None:
+    def toggle_tail_log(self, checked: bool) -> None:
         """Toggle log tail mode using QFileSystemWatcher
         
         Args:
-            state: Checkbox state
+            checked: Whether the button is checked
         """
-        if state == Qt.CheckState.Checked.value:
+        if checked:
+            # Update icon to ON state
+            self.tail_log_btn.setIcon(QIcon(self.TAIL_LOG_ON_ICON))
+            
             if self.current_file and os.path.exists(self.current_file):
                 # Add file to watcher if not already watching
                 if self.current_file not in self.file_watcher.files():
                     self.file_watcher.addPath(self.current_file)
                 self.statusBar().showMessage("Log tail mode started")
             else:
-                self.tail_log_check.setChecked(False)
+                self.tail_log_btn.setChecked(False)
                 QMessageBox.warning(self, "Warning", "Please open a log file first")
         else:
+            # Update icon to OFF state
+            self.tail_log_btn.setIcon(QIcon(self.TAIL_LOG_OFF_ICON))
+            
             # Remove file from watcher
             if self.current_file and self.current_file in self.file_watcher.files():
                 self.file_watcher.removePath(self.current_file)
@@ -991,7 +1004,7 @@ class LogInsight(QMainWindow):
         Args:
             path: Path to the changed file
         """
-        if not self.tail_log_check.isChecked() or path != self.current_file:
+        if not self.tail_log_btn.isChecked() or path != self.current_file:
             return
             
         try:
@@ -1030,7 +1043,7 @@ class LogInsight(QMainWindow):
                             self.statusBar().showMessage(f"Appended {match_count} matching log lines")
                 
                 # Re-add the file to the watcher if it was removed (happens on some systems when file is modified)
-                if path not in self.file_watcher.files() and self.tail_log_check.isChecked():
+                if path not in self.file_watcher.files() and self.tail_log_btn.isChecked():
                     self.file_watcher.addPath(path)
         except Exception as e:
             print(f"File change handling error: {str(e)}")
@@ -1128,7 +1141,7 @@ class LogInsight(QMainWindow):
                 self.result_text.setText("".join(self.log_content))
                 
                 # add file to watcher if tail mode is enabled
-                if self.tail_log_check.isChecked():
+                if self.tail_log_btn.isChecked():
                     self.file_watcher.addPath(self.current_file)
                 
         except Exception as e:
@@ -1201,7 +1214,7 @@ class LogInsight(QMainWindow):
                     self.result_text.setText("".join(self.log_content))
                     
                     # Add file to watcher if tail mode is active
-                    if self.tail_log_check.isChecked():
+                    if self.tail_log_btn.isChecked():
                         self.file_watcher.addPath(self.current_file)
                     
                     # Save current configuration
