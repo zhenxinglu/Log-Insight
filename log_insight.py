@@ -28,6 +28,8 @@ class LogInsight(QMainWindow):
     ARROW_UP_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "arrow_up.svg")
     ARROW_DOWN_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "arrow_down.svg")
     THEME_LIGHT_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "theme_light.svg")
+    WORD_WRAP_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "word_wrap_on.svg")
+    WORD_WRAP_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "word_wrap_off.svg")
     THEME_DARK_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "theme_dark.svg")
     
     def __init__(self) -> None:
@@ -239,10 +241,15 @@ class LogInsight(QMainWindow):
         self.tail_log_check.stateChanged.connect(self.toggle_tail_log)
         self.buttons_layout.addWidget(self.tail_log_check)
         
-        self.word_wrap_check = QCheckBox("Word Wrap")
-        self.word_wrap_check.setChecked(True)
-        self.word_wrap_check.stateChanged.connect(self.toggle_word_wrap)
-        self.buttons_layout.addWidget(self.word_wrap_check)
+        # 使用SVG图标替代Word Wrap复选框
+        self.word_wrap_btn = QToolButton()
+        self.word_wrap_btn.setToolTip("Word Wrap")
+        self.word_wrap_btn.setCheckable(True)
+        self.word_wrap_btn.setChecked(True)
+        self.word_wrap_btn.setIcon(QIcon(self.WORD_WRAP_ON_ICON))
+        self.word_wrap_btn.setIconSize(QSize(20, 20))
+        self.word_wrap_btn.toggled.connect(self.toggle_word_wrap)
+        self.buttons_layout.addWidget(self.word_wrap_btn)
         
         # Add theme toggle button with icon
         self.theme_toggle_btn = QToolButton()
@@ -944,16 +951,18 @@ class LogInsight(QMainWindow):
             # For other keys, call parent class handler
             super().keyPressEvent(event)
     
-    def toggle_word_wrap(self, state: int) -> None:
+    def toggle_word_wrap(self, checked: bool) -> None:
         """Toggle word wrap
         
         Args:
-            state: Checkbox state
+            checked: Button checked state
         """
-        if state == Qt.CheckState.Checked.value:
+        if checked:
             self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+            self.word_wrap_btn.setIcon(QIcon(self.WORD_WRAP_ON_ICON))
         else:
             self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+            self.word_wrap_btn.setIcon(QIcon(self.WORD_WRAP_OFF_ICON))
     
     def toggle_tail_log(self, state: int) -> None:
         """Toggle log tail mode using QFileSystemWatcher
@@ -1083,8 +1092,8 @@ class LogInsight(QMainWindow):
                 
             # restore word wrap setting
             if "word_wrap" in config:
-                self.word_wrap_check.setChecked(config["word_wrap"])
-                self.toggle_word_wrap(Qt.CheckState.Checked.value if config["word_wrap"] else Qt.CheckState.Unchecked.value)
+                self.word_wrap_btn.setChecked(config["word_wrap"])
+                # toggle_word_wrap will be called by the toggled signal
                 
             # restore font size
             if "font_size" in config:
@@ -1134,7 +1143,7 @@ class LogInsight(QMainWindow):
             "end_time": self.end_time_entry.text(),
             "include_case_sensitive": self.include_case_sensitive.isChecked(),
             "exclude_case_sensitive": self.exclude_case_sensitive.isChecked(),
-            "word_wrap": self.word_wrap_check.isChecked(),
+            "word_wrap": self.word_wrap_btn.isChecked(),
             "font_size": self.current_font_size,
             "last_file": self.current_file if self.current_file else "",
             "theme": self.theme_toggle_btn.isChecked(),  # Add theme configuration
