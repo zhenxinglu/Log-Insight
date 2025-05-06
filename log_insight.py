@@ -280,9 +280,6 @@ class LogInsight(QMainWindow):
         self.control_content_layout.addWidget(self.button_widget)
         
         # Results display area
-        self.result_group = QGroupBox("Search Results")
-        self.result_layout = QVBoxLayout(self.result_group)
-        
         self.result_text = QTextEdit()
         self.result_text.setReadOnly(True)
         self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth) 
@@ -291,8 +288,7 @@ class LogInsight(QMainWindow):
         self.result_text.customContextMenuRequested.connect(self.show_context_menu)
         self.result_text.wheelEvent = self.on_mouse_wheel  # Override wheel event
         
-        self.result_layout.addWidget(self.result_text)
-        self.main_layout.addWidget(self.result_group, 1)  # Add stretch factor to make results area occupy more space
+        self.main_layout.addWidget(self.result_text, 1)  # Add stretch factor to make results area occupy more space
         
         # Status bar
         self.statusBar().showMessage("Ready")
@@ -701,8 +697,8 @@ class LogInsight(QMainWindow):
         layout.addWidget(self.close_button)
         
         # set the dialog position - at the top right corner of the result area
-        result_rect = self.result_group.geometry()
-        dialog_pos = self.result_group.mapToGlobal(result_rect.topRight())
+        result_rect = self.result_text.geometry()
+        dialog_pos = self.result_text.mapToGlobal(result_rect.topRight())
         dialog_pos.setX(dialog_pos.x() - self.search_dialog.sizeHint().width() - 10) 
         dialog_pos.setY(dialog_pos.y() + 10)  
         self.search_dialog.move(dialog_pos)
