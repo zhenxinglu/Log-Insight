@@ -301,7 +301,7 @@ class LogInsight(QMainWindow):
         self.help_btn = QToolButton()
         self.help_btn.setIcon(QIcon(self.HELP_ICON))
         self.help_btn.setIconSize(QSize(16, 16))
-        self.help_btn.setToolTip("帮助")
+        self.help_btn.setToolTip("Help")
         self.help_btn.clicked.connect(self.show_help_dialog)
         
         # Add permanent widget to right side of status bar
@@ -1243,7 +1243,7 @@ class LogInsight(QMainWindow):
         from help_content import get_help_content
         
         help_dialog = QDialog(self)
-        help_dialog.setWindowTitle("Log Insight 帮助")
+        help_dialog.setWindowTitle("Log Insight Help")
         help_dialog.setWindowIcon(QIcon(self.HELP_ICON))
         help_dialog.setMinimumSize(600, 400)
         
