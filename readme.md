@@ -2,6 +2,10 @@
 
 This project is a log file viewing tool developed with Python and PyQt. It provides powerful log file viewing, searching, and filtering capabilities to help users quickly locate and analyze log information.
 
+
+![Log Insight](screenshot.png "Log Insight")
+
+
 ## Technical Specifications
 - Uses Python 3.x
 - Uses PyQt 6 library for GUI development
