@@ -33,6 +33,7 @@ class LogInsight(QMainWindow):
     TAIL_LOG_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "tail_log_on.svg")
     TAIL_LOG_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "tail_log_off.svg")
     THEME_DARK_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "theme_dark.svg")
+    HELP_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "help.svg")
     
     def __init__(self) -> None:
         super().__init__()
@@ -295,6 +296,16 @@ class LogInsight(QMainWindow):
         
         # Status bar
         self.statusBar().showMessage("Ready")
+        
+        # Add help button to status bar
+        self.help_btn = QToolButton()
+        self.help_btn.setIcon(QIcon(self.HELP_ICON))
+        self.help_btn.setIconSize(QSize(16, 16))
+        self.help_btn.setToolTip("帮助")
+        self.help_btn.clicked.connect(self.show_help_dialog)
+        
+        # Add permanent widget to right side of status bar
+        self.statusBar().addPermanentWidget(self.help_btn)
     
     # Collapse/Expand control panel
     def toggle_control_panel(self) -> None:
@@ -606,6 +617,10 @@ class LogInsight(QMainWindow):
         # Set up Ctrl+F shortcut
         self.search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
         self.search_shortcut.activated.connect(self.show_search_dialog)
+        
+        # Set up F1 shortcut for help
+        self.help_shortcut = QShortcut(QKeySequence("F1"), self)
+        self.help_shortcut.activated.connect(self.show_help_dialog)
     
     def show_search_dialog(self) -> None:
         """Show search dialog"""
@@ -1222,6 +1237,34 @@ class LogInsight(QMainWindow):
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Cannot open file: {str(e)}")
 
+
+    def show_help_dialog(self) -> None:
+        """Show help dialog with application features and shortcuts"""
+        from help_content import get_help_content
+        
+        help_dialog = QDialog(self)
+        help_dialog.setWindowTitle("Log Insight 帮助")
+        help_dialog.setWindowIcon(QIcon(self.HELP_ICON))
+        help_dialog.setMinimumSize(600, 400)
+        
+        layout = QVBoxLayout(help_dialog)
+        
+        # Create a QTextEdit to display help content
+        help_text = QTextEdit()
+        help_text.setReadOnly(True)
+        
+        # Get help content from the help_content module
+        help_content = get_help_content()
+        
+        help_text.setHtml(help_content)
+        layout.addWidget(help_text)
+        
+        # Add close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(help_dialog.accept)
+        layout.addWidget(close_button, alignment=Qt.AlignmentFlag.AlignRight)
+        
+        help_dialog.exec()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

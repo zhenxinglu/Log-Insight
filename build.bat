@@ -6,5 +6,5 @@ del /Q build\* 2>nul
 echo packing...
 pyinstaller --onefile --windowed --name LogInsight log_insight.py
 
-echo 打包完成，安装包位于dist目录下。
+echo packing done, installer located in dist folder.
 pause
