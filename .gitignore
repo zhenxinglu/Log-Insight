@@ -1,1 +1,5 @@
 config.json
+build/
+dist/
+.vscode
+.lingma/
