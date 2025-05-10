@@ -510,7 +510,8 @@ class LogInsight(QMainWindow):
         time_pattern: Pattern = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d{3})')
         
         match_count: int = 0
-        result_text = ""
+        # Use a list to collect matching lines instead of string concatenation
+        result_lines: List[str] = []
         
         for line in log_lines:
             # Check for any exclude keywords (high priority)
@@ -541,10 +542,12 @@ class LogInsight(QMainWindow):
                     # Skip line if time filtering is needed but no time found
                     continue
             
-            # Add matching line to results
-            result_text += line
+            # Add matching line to results list
+            result_lines.append(line)
             match_count += 1
         
+        # Join the collected lines into a single string for better performance
+        result_text = "".join(result_lines)
         return result_text, match_count
     
     def search_log(self) -> None:
@@ -896,11 +899,6 @@ class LogInsight(QMainWindow):
         cursor.clearSelection()
     
     def on_mouse_wheel(self, event: QWheelEvent) -> None:
-        """处理鼠标滚轮事件，支持Ctrl+滚轮调整字体大小和普通滚轮滚动文本
-        
-        Args:
-            event: 鼠标事件对象
-        """
         # check if Ctrl is pressed
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             delta = event.angleDelta().y()
