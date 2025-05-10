@@ -8,7 +8,7 @@ from typing import List, Pattern, Optional, Tuple
 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QTextEdit, QFrame, QGroupBox,
-                             QPushButton, QCheckBox, QFileDialog, QMessageBox, QMenu,
+                             QPushButton, QFileDialog, QMessageBox, QMenu,
                              QGridLayout, QDialog, QToolButton)
 from PyQt6.QtGui import (QFont, QWheelEvent, QIcon,
                          QDragEnterEvent, QDropEvent, QTextCursor, QTextCharFormat, QKeySequence,
@@ -44,16 +44,16 @@ class LogInsight(QMainWindow):
         app_icon = QIcon(self.APP_LOGO_ICON)
         self.setWindowIcon(app_icon)
         
-        # Initialize variables
         self.log_content: List[str] = []
         self.current_file: Optional[str] = None
         self.current_font_size: int = 10
         
-        # Initialize file watcher
+        # Default prompt text when no file is loaded
+        self.default_prompt_text = "Click \"Open Log File\" to open file or drag file here."
+        
         self.file_watcher = QFileSystemWatcher()
         self.file_watcher.fileChanged.connect(self.on_file_changed)
         
-        # Initialize collapse state variables
         self.filter_collapsed: bool = False
         self.button_collapsed: bool = False
         
@@ -240,7 +240,6 @@ class LogInsight(QMainWindow):
         self.search_button.clicked.connect(self.search_log)
         self.buttons_layout.addWidget(self.search_button)
         
-        # 使用SVG图标替代Tail Log复选框
         self.tail_log_btn = QToolButton()
         self.tail_log_btn.setToolTip("Tail Log")
         self.tail_log_btn.setCheckable(True)
@@ -249,7 +248,6 @@ class LogInsight(QMainWindow):
         self.tail_log_btn.toggled.connect(self.toggle_tail_log)
         self.buttons_layout.addWidget(self.tail_log_btn)
         
-        # 使用SVG图标替代Word Wrap复选框
         self.word_wrap_btn = QToolButton()
         self.word_wrap_btn.setToolTip("Word Wrap")
         self.word_wrap_btn.setCheckable(True)
@@ -261,7 +259,6 @@ class LogInsight(QMainWindow):
         
         # Add theme toggle button with icon
         self.theme_toggle_btn = QToolButton()
-        #self.theme_toggle_btn.setToolTip("切换主题")
         self.theme_toggle_btn.setCheckable(True)
         self.theme_toggle_btn.setIcon(QIcon(self.THEME_LIGHT_ICON))
         self.theme_toggle_btn.setIconSize(QSize(20, 20))
@@ -287,6 +284,11 @@ class LogInsight(QMainWindow):
         self.result_text.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.result_text.customContextMenuRequested.connect(self.show_context_menu)
         self.result_text.wheelEvent = self.on_mouse_wheel  # Override wheel event
+        
+        # Set default prompt text
+        if not self.current_file:
+            self.result_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.result_text.setText(self.default_prompt_text)
         
         self.main_layout.addWidget(self.result_text, 1)  # Add stretch factor to make results area occupy more space
         
@@ -421,12 +423,15 @@ class LogInsight(QMainWindow):
                     self.file_watcher.removePath(self.current_file)
                 
                 self.current_file = file_path
+                # Reset file position tracker when opening a new file
+                self.last_file_position = 0
+                
                 self.statusBar().showMessage(f"File loaded: {os.path.basename(file_path)} - {len(self.log_content)} lines")
-                self.clear_results()
                 # Update window title to show file path
                 self.setWindowTitle(f"Log Insight - {file_path}")
                 
                 # Display log content in results area
+                self.result_text.setAlignment(Qt.AlignmentFlag.AlignLeft)
                 self.result_text.setText("".join(self.log_content))
                 
                 # Add file to watcher if tail mode is active
@@ -538,9 +543,9 @@ class LogInsight(QMainWindow):
                     except ValueError:
                         # Skip time filtering if time parsing fails
                         pass
-                elif start_datetime or end_datetime:
-                    # Skip line if time filtering is needed but no time found
-                    continue
+                # elif start_datetime or end_datetime:
+                #     # Skip line if time filtering is needed but no time found
+                #     continue
             
             # Add matching line to results list
             result_lines.append(line)
@@ -581,6 +586,13 @@ class LogInsight(QMainWindow):
     
     def clear_results(self) -> None:
         self.result_text.clear()
+        
+        # Show default prompt text if no file is loaded
+        if not self.current_file:
+            self.result_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.result_text.setText(self.default_prompt_text)
+        else:
+            self.result_text.setAlignment(Qt.AlignmentFlag.AlignLeft)
     
     def show_context_menu(self, position) -> None:
         context_menu = QMenu()
@@ -991,6 +1003,8 @@ class LogInsight(QMainWindow):
             self.tail_log_btn.setIcon(QIcon(self.TAIL_LOG_ON_ICON))
             
             if self.current_file and os.path.exists(self.current_file):
+                # Update last file position to current file size to only read new content
+                self.last_file_position = os.path.getsize(self.current_file)
                 # Add file to watcher if not already watching
                 if self.current_file not in self.file_watcher.files():
                     self.file_watcher.addPath(self.current_file)
@@ -1006,6 +1020,9 @@ class LogInsight(QMainWindow):
             if self.current_file and self.current_file in self.file_watcher.files():
                 self.file_watcher.removePath(self.current_file)
             self.statusBar().showMessage("Log tail mode stopped")
+    
+    # Track the last file position for tail mode
+    last_file_position: int = 0
     
     def on_file_changed(self, path: str) -> None:
         """Handle file change events from QFileSystemWatcher
@@ -1023,17 +1040,17 @@ class LogInsight(QMainWindow):
                 
                 # Read only new content
                 with open(path, 'r', encoding='utf-8', errors='ignore') as file:
-                    # Get current content length in the text edit
-                    current_content_length = len(self.result_text.toPlainText())
-                    
-                    # If file is smaller than what we have (file was truncated), read from beginning
-                    if current_size < current_content_length:
+                    # If file is smaller than last position (file was truncated), read from beginning
+                    if current_size < self.last_file_position:
                         file.seek(0)
+                        self.last_file_position = 0
                     else:
-                        # Otherwise, read only new content
-                        file.seek(max(0, current_size - (current_size - current_content_length)))
+                        # Otherwise, read only new content from last position
+                        file.seek(self.last_file_position)
                     
                     new_content = file.read()
+                    # Update last position for next read
+                    self.last_file_position = current_size
                 
                 if new_content:
                     # Split new content into lines
@@ -1220,6 +1237,7 @@ class LogInsight(QMainWindow):
                     self.setWindowTitle(f"LogInsight - {file_path}")
                     
                     # Display log content in results area
+                    self.result_text.setAlignment(Qt.AlignmentFlag.AlignLeft)
                     self.result_text.setText("".join(self.log_content))
                     
                     # Add file to watcher if tail mode is active
