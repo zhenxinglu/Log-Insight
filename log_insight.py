@@ -15,11 +15,9 @@ from PyQt6.QtGui import (QFont, QWheelEvent, QIcon,
                          QShortcut)
 from PyQt6.QtCore import Qt, QTimer, QSize, QFileSystemWatcher
 
-
-
 class LogInsight(QMainWindow):
     # Configuration file path
-    CONFIG_FILE: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+    CONFIG_FILE: str = os.path.join(os.path.expanduser('~'), "logInsight.json")
     
     # Icon file paths
     CASE_SENSITIVE_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "case_sensitive_on.svg")
@@ -34,6 +32,9 @@ class LogInsight(QMainWindow):
     TAIL_LOG_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "tail_log_off.svg")
     THEME_DARK_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "theme_dark.svg")
     HELP_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "help.svg")
+
+    # Track the last file position for tail mode
+    last_file_position: int = 0
     
     def __init__(self) -> None:
         super().__init__()
@@ -50,6 +51,9 @@ class LogInsight(QMainWindow):
         
         # Default prompt text when no file is loaded
         self.default_prompt_text = "Click \"Open Log File\" to open file or drag file here."
+        
+        self.prompt_text_color = "#0066cc"  
+        self.prompt_text_size = 16  
         
         self.file_watcher = QFileSystemWatcher()
         self.file_watcher.fileChanged.connect(self.on_file_changed)
@@ -288,7 +292,7 @@ class LogInsight(QMainWindow):
         # Set default prompt text
         if not self.current_file:
             self.result_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.result_text.setText(self.default_prompt_text)
+            self.apply_styled_prompt_text()
         
         self.main_layout.addWidget(self.result_text, 1)  # Add stretch factor to make results area occupy more space
         
@@ -361,6 +365,14 @@ class LogInsight(QMainWindow):
             self.theme_toggle_btn.setIcon(QIcon(self.THEME_LIGHT_ICON))
             self.theme_toggle_btn.setToolTip("switch to dark theme")
             self.result_text.setStyleSheet("background-color: white; color: black;")
+    
+    def apply_styled_prompt_text(self) -> None:
+        """Apply styled HTML format to the default prompt text
+        """
+        # Create HTML with the configured style properties
+        prompt_html = f'<div style="font-size: {self.prompt_text_size}pt; color: {self.prompt_text_color}; font-weight: bold;">{self.default_prompt_text}</div>'
+        self.result_text.setHtml(prompt_html)
+    
     
     def validate_time_format(self, time_str: str) -> bool:
         """Validate if the time string matches the required format
@@ -590,7 +602,8 @@ class LogInsight(QMainWindow):
         # Show default prompt text if no file is loaded
         if not self.current_file:
             self.result_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.result_text.setText(self.default_prompt_text)
+            prompt_html = f'<div style="font-size: 16pt; font-weight: bold; color: #0066cc;">{self.default_prompt_text}</div>'
+            self.result_text.setHtml(prompt_html)
         else:
             self.result_text.setAlignment(Qt.AlignmentFlag.AlignLeft)
     
@@ -1021,9 +1034,6 @@ class LogInsight(QMainWindow):
                 self.file_watcher.removePath(self.current_file)
             self.statusBar().showMessage("Log tail mode stopped")
     
-    # Track the last file position for tail mode
-    last_file_position: int = 0
-    
     def on_file_changed(self, path: str) -> None:
         """Handle file change events from QFileSystemWatcher
         
@@ -1247,6 +1257,8 @@ class LogInsight(QMainWindow):
                     # Save current configuration
                     self.save_config()
                 except Exception as e:
+                    self.current_file = None
+                    self.clear_results()
                     QMessageBox.critical(self, "Error", f"Cannot open file: {str(e)}")
 
 
