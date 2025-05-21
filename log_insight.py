@@ -13,25 +13,153 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
 from PyQt6.QtGui import (QFont, QWheelEvent, QIcon,
                          QDragEnterEvent, QDropEvent, QTextCursor, QTextCharFormat, QKeySequence,
                          QShortcut)
-from PyQt6.QtCore import Qt, QTimer, QSize, QFileSystemWatcher
+from PyQt6.QtCore import Qt, QTimer, QSize, QFileSystemWatcher, QThread, pyqtSignal
+
+class FilterWorker(QThread):
+    """Worker thread for filtering log content"""
+    # Signal to emit when filtering is complete
+    filteringComplete = pyqtSignal(str, int)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.log_lines = []
+        self.include_terms = []
+        self.exclude_terms = []
+        self.include_case_sensitive = False
+        self.exclude_case_sensitive = False
+        self.start_time = ""
+        self.end_time = ""
+        self.include_patterns = []
+        self.exclude_patterns = []
+        
+    def setup(self, log_lines, include_terms, exclude_terms, 
+              include_case_sensitive, exclude_case_sensitive,
+              start_time, end_time):
+        """Set up the worker with filtering parameters"""
+        self.log_lines = log_lines
+        self.include_terms = include_terms
+        self.exclude_terms = exclude_terms
+        self.include_case_sensitive = include_case_sensitive
+        self.exclude_case_sensitive = exclude_case_sensitive
+        self.start_time = start_time
+        self.end_time = end_time
+        
+        # Pre-compile patterns for better performance
+        self.include_patterns = []
+        for term in self.include_terms:
+            escaped_term = re.escape(term)
+            if self.include_case_sensitive:
+                self.include_patterns.append(re.compile(escaped_term))
+            else:
+                self.include_patterns.append(re.compile(escaped_term, re.IGNORECASE))
+        
+        self.exclude_patterns = []
+        for term in self.exclude_terms:
+            escaped_term = re.escape(term)
+            if self.exclude_case_sensitive:
+                self.exclude_patterns.append(re.compile(escaped_term))
+            else:
+                self.exclude_patterns.append(re.compile(escaped_term, re.IGNORECASE))
+    
+    def run(self):
+        """Run the filtering process in background thread"""
+        time_format = "%H:%M:%S.%f"
+        use_time_filter = False
+        start_datetime = None
+        end_datetime = None
+        
+        # Process time filters
+        if self.start_time:
+            try:
+                start_datetime = datetime.strptime(self.start_time, time_format)
+                use_time_filter = True
+            except ValueError:
+                # Invalid time format, will be handled in the main thread
+                pass
+                
+        if self.end_time:
+            try:
+                end_datetime = datetime.strptime(self.end_time, time_format)
+                use_time_filter = True
+            except ValueError:
+                # Invalid time format, will be handled in the main thread
+                pass
+        
+        # Time regex pattern (matches HH:MM:SS.XXX at line start)
+        time_pattern = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d{3})')
+        
+        match_count = 0
+        result_lines = []
+        
+        for line in self.log_lines:
+            # Check for any exclude keywords (high priority)
+            if self.exclude_patterns and any(pattern.search(line) for pattern in self.exclude_patterns):
+                continue
+            
+            # Check for at least one include keyword
+            if self.include_patterns and not any(pattern.search(line) for pattern in self.include_patterns):
+                continue
+            
+            # Time filtering
+            if use_time_filter:
+                time_match = time_pattern.search(line)
+                if time_match:
+                    line_time_str = time_match.group(1)
+                    try:
+                        line_time = datetime.strptime(line_time_str, time_format)
+                        
+                        # Check time range
+                        if start_datetime and line_time < start_datetime:
+                            continue
+                        if end_datetime and line_time > end_datetime:
+                            continue
+                    except ValueError:
+                        # Skip time filtering if time parsing fails
+                        pass
+            
+            # Add matching line to results list
+            result_lines.append(line)
+            match_count += 1
+        
+        # Join the collected lines into a single string for better performance
+        result_text = "".join(result_lines)
+        
+        # Emit signal with results
+        self.filteringComplete.emit(result_text, match_count)
 
 class LogInsight(QMainWindow):
     # Configuration file path
     CONFIG_FILE: str = os.path.join(os.path.expanduser('~'), "logInsight.json")
     
-    # Icon file paths
-    CASE_SENSITIVE_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "case_sensitive_on.svg")
-    CASE_SENSITIVE_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "case_sensitive_off.svg")
-    APP_LOGO_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "logo.svg")
-    ARROW_UP_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "arrow_up.svg")
-    ARROW_DOWN_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "arrow_down.svg")
-    THEME_LIGHT_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "theme_light.svg")
-    WORD_WRAP_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "word_wrap_on.svg")
-    WORD_WRAP_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "word_wrap_off.svg")
-    TAIL_LOG_ON_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "tail_log_on.svg")
-    TAIL_LOG_OFF_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "tail_log_off.svg")
-    THEME_DARK_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "theme_dark.svg")
-    HELP_ICON: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "help.svg")
+    # Base path for icons
+    ICONS_DIR: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
+    
+    ICON_NAMES = {
+        'CASE_SENSITIVE_ON': "case_sensitive_on.svg",
+        'CASE_SENSITIVE_OFF': "case_sensitive_off.svg",
+        'APP_LOGO': "logo.svg",
+        'ARROW_UP': "arrow_up.svg",
+        'ARROW_DOWN': "arrow_down.svg",
+        'THEME_LIGHT': "theme_light.svg",
+        'THEME_DARK': "theme_dark.svg",
+        'WORD_WRAP_ON': "word_wrap_on.svg",
+        'WORD_WRAP_OFF': "word_wrap_off.svg",
+        'TAIL_LOG_ON': "tail_log_on.svg",
+        'TAIL_LOG_OFF': "tail_log_off.svg",
+        'HELP': "help.svg"
+    }
+    
+    @classmethod
+    def get_icon_path(cls, icon_name: str) -> str:
+        """Get the full path for an icon based on its name
+        
+        Args:
+            icon_name: Name of the icon from ICON_NAMES
+            
+        Returns:
+            Full path to the icon file
+        """
+        return os.path.join(cls.ICONS_DIR, cls.ICON_NAMES.get(icon_name, icon_name))
 
     # Track the last file position for tail mode
     last_file_position: int = 0
@@ -42,7 +170,7 @@ class LogInsight(QMainWindow):
         self.setWindowTitle("Log Insight")
         
         # Set application icon
-        app_icon = QIcon(self.APP_LOGO_ICON)
+        app_icon = QIcon(self.get_icon_path('APP_LOGO'))
         self.setWindowIcon(app_icon)
         
         self.log_content: List[str] = []
@@ -55,6 +183,7 @@ class LogInsight(QMainWindow):
         self.prompt_text_color = "#0066cc"  
         self.prompt_text_size = 16  
         
+        # Initialize file watcher variables
         self.file_watcher = QFileSystemWatcher()
         self.file_watcher.fileChanged.connect(self.on_file_changed)
         
@@ -69,8 +198,8 @@ class LogInsight(QMainWindow):
         self.search_highlight_format.setBackground(Qt.GlobalColor.yellow)
         self.search_highlight_format.setForeground(Qt.GlobalColor.black)
         
-        self.case_sensitive_on_icon = QIcon(self.CASE_SENSITIVE_ON_ICON)
-        self.case_sensitive_off_icon = QIcon(self.CASE_SENSITIVE_OFF_ICON)
+        self.case_sensitive_on_icon = QIcon(self.get_icon_path('CASE_SENSITIVE_ON'))
+        self.case_sensitive_off_icon = QIcon(self.get_icon_path('CASE_SENSITIVE_OFF'))
         
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -82,6 +211,10 @@ class LogInsight(QMainWindow):
         self.load_config()
         self.setAcceptDrops(True)
         self.setup_shortcuts()
+        
+        # Create worker thread for filtering
+        self.filter_worker = FilterWorker(self)
+        self.filter_worker.filteringComplete.connect(self.on_filtering_complete)
     
     def setup_ui(self) -> None:
         self.control_group = QGroupBox()
@@ -247,7 +380,7 @@ class LogInsight(QMainWindow):
         self.tail_log_btn = QToolButton()
         self.tail_log_btn.setToolTip("Tail Log")
         self.tail_log_btn.setCheckable(True)
-        self.tail_log_btn.setIcon(QIcon(self.TAIL_LOG_OFF_ICON))
+        self.tail_log_btn.setIcon(QIcon(self.get_icon_path('TAIL_LOG_OFF')))
         self.tail_log_btn.setIconSize(QSize(20, 20))
         self.tail_log_btn.toggled.connect(self.toggle_tail_log)
         self.buttons_layout.addWidget(self.tail_log_btn)
@@ -256,7 +389,7 @@ class LogInsight(QMainWindow):
         self.word_wrap_btn.setToolTip("Word Wrap")
         self.word_wrap_btn.setCheckable(True)
         self.word_wrap_btn.setChecked(True)
-        self.word_wrap_btn.setIcon(QIcon(self.WORD_WRAP_ON_ICON))
+        self.word_wrap_btn.setIcon(QIcon(self.get_icon_path('WORD_WRAP_ON')))
         self.word_wrap_btn.setIconSize(QSize(20, 20))
         self.word_wrap_btn.toggled.connect(self.toggle_word_wrap)
         self.buttons_layout.addWidget(self.word_wrap_btn)
@@ -264,7 +397,7 @@ class LogInsight(QMainWindow):
         # Add theme toggle button with icon
         self.theme_toggle_btn = QToolButton()
         self.theme_toggle_btn.setCheckable(True)
-        self.theme_toggle_btn.setIcon(QIcon(self.THEME_LIGHT_ICON))
+        self.theme_toggle_btn.setIcon(QIcon(self.get_icon_path('THEME_LIGHT')))
         self.theme_toggle_btn.setIconSize(QSize(20, 20))
         self.theme_toggle_btn.toggled.connect(self.toggle_theme)
         self.buttons_layout.addWidget(self.theme_toggle_btn)
@@ -301,7 +434,7 @@ class LogInsight(QMainWindow):
         
         # Add help button to status bar
         self.help_btn = QToolButton()
-        self.help_btn.setIcon(QIcon(self.HELP_ICON))
+        self.help_btn.setIcon(QIcon(self.get_icon_path('HELP')))
         self.help_btn.setIconSize(QSize(16, 16))
         self.help_btn.setToolTip("Help")
         self.help_btn.clicked.connect(self.show_help_dialog)
@@ -357,12 +490,12 @@ class LogInsight(QMainWindow):
         """
         if checked:
             # Dark mode
-            self.theme_toggle_btn.setIcon(QIcon(self.THEME_DARK_ICON))
+            self.theme_toggle_btn.setIcon(QIcon(self.get_icon_path('THEME_DARK')))
             self.theme_toggle_btn.setToolTip("switch to light theme")
             self.result_text.setStyleSheet("background-color: black; color: white;")
         else:
             # Light mode
-            self.theme_toggle_btn.setIcon(QIcon(self.THEME_LIGHT_ICON))
+            self.theme_toggle_btn.setIcon(QIcon(self.get_icon_path('THEME_LIGHT')))
             self.theme_toggle_btn.setToolTip("switch to dark theme")
             self.result_text.setStyleSheet("background-color: white; color: black;")
     
@@ -701,7 +834,7 @@ class LogInsight(QMainWindow):
         
         # Create previous button
         self.prev_button = QToolButton()
-        self.prev_button.setIcon(QIcon(self.ARROW_UP_ICON))
+        self.prev_button.setIcon(QIcon(self.get_icon_path('ARROW_UP')))
         self.prev_button.setIconSize(QSize(16, 16))  # Fixed icon size
         self.prev_button.setToolTip("Previous Match (Shift+F3)")
         self.prev_button.clicked.connect(lambda: self.navigate_search(-1))
@@ -710,7 +843,7 @@ class LogInsight(QMainWindow):
         
         # Create next button
         self.next_button = QToolButton()
-        self.next_button.setIcon(QIcon(self.ARROW_DOWN_ICON))
+        self.next_button.setIcon(QIcon(self.get_icon_path('ARROW_DOWN')))
         self.next_button.setIconSize(QSize(16, 16))  # Fixed icon size
         self.next_button.setToolTip("Next Match (F3)")
         self.next_button.clicked.connect(lambda: self.navigate_search(1))
@@ -1000,10 +1133,10 @@ class LogInsight(QMainWindow):
         """
         if checked:
             self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-            self.word_wrap_btn.setIcon(QIcon(self.WORD_WRAP_ON_ICON))
+            self.word_wrap_btn.setIcon(QIcon(self.get_icon_path('WORD_WRAP_ON')))
         else:
             self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-            self.word_wrap_btn.setIcon(QIcon(self.WORD_WRAP_OFF_ICON))
+            self.word_wrap_btn.setIcon(QIcon(self.get_icon_path('WORD_WRAP_OFF')))
     
     def toggle_tail_log(self, checked: bool) -> None:
         """Toggle log tail mode using QFileSystemWatcher
@@ -1013,7 +1146,7 @@ class LogInsight(QMainWindow):
         """
         if checked:
             # Update icon to ON state
-            self.tail_log_btn.setIcon(QIcon(self.TAIL_LOG_ON_ICON))
+            self.tail_log_btn.setIcon(QIcon(self.get_icon_path('TAIL_LOG_ON')))
             
             if self.current_file and os.path.exists(self.current_file):
                 # Update last file position to current file size to only read new content
@@ -1027,7 +1160,7 @@ class LogInsight(QMainWindow):
                 QMessageBox.warning(self, "Warning", "Please open a log file first")
         else:
             # Update icon to OFF state
-            self.tail_log_btn.setIcon(QIcon(self.TAIL_LOG_OFF_ICON))
+            self.tail_log_btn.setIcon(QIcon(self.get_icon_path('TAIL_LOG_OFF')))
             
             # Remove file from watcher
             if self.current_file and self.current_file in self.file_watcher.files():
@@ -1040,49 +1173,81 @@ class LogInsight(QMainWindow):
         Args:
             path: Path to the changed file
         """
+        # Quick exit if not tailing or not the current file
         if not self.tail_log_btn.isChecked() or path != self.current_file:
             return
             
-        try:
-            if os.path.exists(path):
-                # Get current file size
-                current_size = os.path.getsize(path)
+        if not os.path.exists(path):
+            return
+
+        # Get current file size
+        current_size = os.path.getsize(path)
+
+        # Read only new content
+        with open(path, 'r', encoding='utf-8', errors='ignore') as file:
+                # If file is smaller than last position (file was truncated), read from beginning
+            if current_size < self.last_file_position:
+                    file.seek(0)
+                    self.last_file_position = 0
+            else:
+                    # Otherwise, read only new content from last position
+                    file.seek(self.last_file_position)
+
+            new_content = file.read()
+            # Update last position for next read
+            self.last_file_position = current_size
+
+        # Process new content in background thread if there's content
+        if new_content:
+            new_lines = new_content.splitlines(True)  # Keep line breaks
+
+            if new_lines:
+                    # Parse filter parameters
+                include_input = self.include_entry.text().strip()
+                include_terms = self.parse_keywords(include_input)
+
+                exclude_input = self.exclude_entry.text().strip()
+                exclude_terms = self.parse_keywords(exclude_input)
+
+                start_time = self.start_time_entry.text().strip()
+                end_time = self.end_time_entry.text().strip()
+
+                include_case_sensitive = self.include_case_sensitive.isChecked()
+                exclude_case_sensitive = self.exclude_case_sensitive.isChecked()
+
+                self.filter_worker.setup(
+                        new_lines,
+                        include_terms,
+                        exclude_terms,
+                        include_case_sensitive,
+                        exclude_case_sensitive,
+                        start_time,
+                        end_time
+                )
+
+                # Start the worker thread if it's not already running
+                if not self.filter_worker.isRunning():
+                    self.filter_worker.start()
+
+        # Re-add the file to the watcher if it was removed
+        if path not in self.file_watcher.files() and self.tail_log_btn.isChecked():
+                self.file_watcher.addPath(path)
                 
-                # Read only new content
-                with open(path, 'r', encoding='utf-8', errors='ignore') as file:
-                    # If file is smaller than last position (file was truncated), read from beginning
-                    if current_size < self.last_file_position:
-                        file.seek(0)
-                        self.last_file_position = 0
-                    else:
-                        # Otherwise, read only new content from last position
-                        file.seek(self.last_file_position)
-                    
-                    new_content = file.read()
-                    # Update last position for next read
-                    self.last_file_position = current_size
-                
-                if new_content:
-                    # Split new content into lines
-                    new_lines = new_content.splitlines(True)  # Keep line breaks
-                    
-                    if new_lines:
-                        # Apply filter conditions
-                        filtered_content, match_count = self.filter_log_content(new_lines)
-                        
-                        if filtered_content:
-                            # Append filtered content to results text box
-                            self.result_text.append(filtered_content)
-                            # Scroll to bottom
-                            self.result_text.verticalScrollBar().setValue(self.result_text.verticalScrollBar().maximum())
-                            
-                            self.statusBar().showMessage(f"Appended {match_count} matching log lines")
-                
-                # Re-add the file to the watcher if it was removed (happens on some systems when file is modified)
-                if path not in self.file_watcher.files() and self.tail_log_btn.isChecked():
-                    self.file_watcher.addPath(path)
-        except Exception as e:
-            print(f"File change handling error: {str(e)}")
+
+    def on_filtering_complete(self, filtered_content: str, match_count: int) -> None:
+        """Handle completion of background filtering
+        
+        Args:
+            filtered_content: The filtered text content
+            match_count: Number of matching lines
+        """
+        if filtered_content:
+            # Append filtered content to results text box
+            self.result_text.append(filtered_content)
+            # Scroll to bottom
+            self.result_text.verticalScrollBar().setValue(self.result_text.verticalScrollBar().maximum())
+            
+            self.statusBar().showMessage(f"Appended {match_count} matching log lines")
     
     def parse_keywords(self, input_str: str) -> List[str]:
         """parse keywords, support space separation and keywords with spaces inside quotes
@@ -1173,7 +1338,7 @@ class LogInsight(QMainWindow):
                     self.log_content = file.readlines()
                 
                 self.statusBar().showMessage(f"File loaded: {os.path.basename(self.current_file)} - {len(self.log_content)} lines")
-                self.setWindowTitle(f"Log Insight - {self.current_file}")
+                self.setWindowTitle(f"LogInsight - {self.current_file}")
                 self.result_text.setText("".join(self.log_content))
                 
                 # add file to watcher if tail mode is enabled
@@ -1268,7 +1433,7 @@ class LogInsight(QMainWindow):
         
         help_dialog = QDialog(self)
         help_dialog.setWindowTitle("Log Insight Help")
-        help_dialog.setWindowIcon(QIcon(self.HELP_ICON))
+        help_dialog.setWindowIcon(QIcon(self.get_icon_path('HELP')))
         help_dialog.setMinimumSize(600, 400)
         
         layout = QVBoxLayout(help_dialog)
