@@ -15,9 +15,110 @@ from PyQt6.QtGui import (QFont, QWheelEvent, QIcon,
                          QShortcut)
 from PyQt6.QtCore import Qt, QTimer, QSize, QFileSystemWatcher, QThread, pyqtSignal
 
+class LogFilter:
+    """Utility class for filtering log content"""
+    
+    @staticmethod
+    def compile_patterns(terms: List[str], case_sensitive: bool) -> List[Pattern]:
+        """Compile regex patterns from terms
+        
+        Args:
+            terms: List of search terms
+            case_sensitive: Whether to use case sensitive matching
+            
+        Returns:
+            List of compiled regex patterns
+        """
+        patterns = []
+        for term in terms:
+            # Consider it as normal string, rather than regular expression
+            escaped_term = re.escape(term)
+            if case_sensitive:
+                patterns.append(re.compile(escaped_term))
+            else:
+                patterns.append(re.compile(escaped_term, re.IGNORECASE))
+        return patterns
+    
+    @staticmethod
+    def filter_logs(log_lines: List[str], 
+                   include_patterns: List[Pattern],
+                   exclude_patterns: List[Pattern],
+                   start_time: str = "",
+                   end_time: str = "") -> Tuple[str, int]:
+        """Filter log lines based on patterns and time range
+        
+        Args:
+            log_lines: List of log lines to filter
+            include_patterns: List of regex patterns to include
+            exclude_patterns: List of regex patterns to exclude
+            start_time: Start time string in format HH:MM:SS.mmm
+            end_time: End time string in format HH:MM:SS.mmm
+            
+        Returns:
+            Tuple of (filtered_content, match_count)
+        """
+        time_format = "%H:%M:%S.%f"
+        use_time_filter = False
+        start_datetime = None
+        end_datetime = None
+        
+        # Process time filters
+        if start_time:
+            try:
+                start_datetime = datetime.strptime(start_time, time_format)
+                use_time_filter = True
+            except ValueError:
+                pass
+                
+        if end_time:
+            try:
+                end_datetime = datetime.strptime(end_time, time_format)
+                use_time_filter = True
+            except ValueError:
+                pass
+        
+        # Time regex pattern (matches HH:MM:SS.XXX at line start)
+        time_pattern = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d{3})')
+        
+        match_count = 0
+        result_lines = []
+        
+        for line in log_lines:
+            # Check for any exclude keywords (high priority)
+            if exclude_patterns and any(pattern.search(line) for pattern in exclude_patterns):
+                continue
+            
+            # Check for at least one include keyword
+            if include_patterns and not any(pattern.search(line) for pattern in include_patterns):
+                continue
+            
+            # Time filtering
+            if use_time_filter:
+                time_match = time_pattern.search(line)
+                if time_match:
+                    line_time_str = time_match.group(1)
+                    try:
+                        line_time = datetime.strptime(line_time_str, time_format)
+                        
+                        # Check time range
+                        if start_datetime and line_time < start_datetime:
+                            continue
+                        if end_datetime and line_time > end_datetime:
+                            continue
+                    except ValueError:
+                        # Skip time filtering if time parsing fails
+                        pass
+            
+            # Add matching line to results list
+            result_lines.append(line)
+            match_count += 1
+        
+        # Join the collected lines into a single string for better performance
+        result_text = "".join(result_lines)
+        return result_text, match_count
+
 class FilterWorker(QThread):
     """Worker thread for filtering log content"""
-    # Signal to emit when filtering is complete
     filteringComplete = pyqtSignal(str, int)
     
     def __init__(self, parent=None):
@@ -45,84 +146,21 @@ class FilterWorker(QThread):
         self.end_time = end_time
         
         # Pre-compile patterns for better performance
-        self.include_patterns = []
-        for term in self.include_terms:
-            escaped_term = re.escape(term)
-            if self.include_case_sensitive:
-                self.include_patterns.append(re.compile(escaped_term))
-            else:
-                self.include_patterns.append(re.compile(escaped_term, re.IGNORECASE))
-        
-        self.exclude_patterns = []
-        for term in self.exclude_terms:
-            escaped_term = re.escape(term)
-            if self.exclude_case_sensitive:
-                self.exclude_patterns.append(re.compile(escaped_term))
-            else:
-                self.exclude_patterns.append(re.compile(escaped_term, re.IGNORECASE))
+        self.include_patterns = LogFilter.compile_patterns(
+            self.include_terms, self.include_case_sensitive)
+        self.exclude_patterns = LogFilter.compile_patterns(
+            self.exclude_terms, self.exclude_case_sensitive)
     
     def run(self):
         """Run the filtering process in background thread"""
-        time_format = "%H:%M:%S.%f"
-        use_time_filter = False
-        start_datetime = None
-        end_datetime = None
-        
-        # Process time filters
-        if self.start_time:
-            try:
-                start_datetime = datetime.strptime(self.start_time, time_format)
-                use_time_filter = True
-            except ValueError:
-                # Invalid time format, will be handled in the main thread
-                pass
-                
-        if self.end_time:
-            try:
-                end_datetime = datetime.strptime(self.end_time, time_format)
-                use_time_filter = True
-            except ValueError:
-                # Invalid time format, will be handled in the main thread
-                pass
-        
-        # Time regex pattern (matches HH:MM:SS.XXX at line start)
-        time_pattern = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d{3})')
-        
-        match_count = 0
-        result_lines = []
-        
-        for line in self.log_lines:
-            # Check for any exclude keywords (high priority)
-            if self.exclude_patterns and any(pattern.search(line) for pattern in self.exclude_patterns):
-                continue
-            
-            # Check for at least one include keyword
-            if self.include_patterns and not any(pattern.search(line) for pattern in self.include_patterns):
-                continue
-            
-            # Time filtering
-            if use_time_filter:
-                time_match = time_pattern.search(line)
-                if time_match:
-                    line_time_str = time_match.group(1)
-                    try:
-                        line_time = datetime.strptime(line_time_str, time_format)
-                        
-                        # Check time range
-                        if start_datetime and line_time < start_datetime:
-                            continue
-                        if end_datetime and line_time > end_datetime:
-                            continue
-                    except ValueError:
-                        # Skip time filtering if time parsing fails
-                        pass
-            
-            # Add matching line to results list
-            result_lines.append(line)
-            match_count += 1
-        
-        # Join the collected lines into a single string for better performance
-        result_text = "".join(result_lines)
+        # Use the shared filtering logic
+        result_text, match_count = LogFilter.filter_logs(
+            self.log_lines,
+            self.include_patterns,
+            self.exclude_patterns,
+            self.start_time,
+            self.end_time
+        )
         
         # Emit signal with results
         self.filteringComplete.emit(result_text, match_count)
@@ -598,11 +636,11 @@ class LogInsight(QMainWindow):
         Returns:
             Tuple of filtered text content and number of matches
         """
-        # parse include keywords
+        # Parse include keywords
         include_input: str = self.include_entry.text().strip()
         include_terms: List[str] = self.parse_keywords(include_input)
         
-        # parse exclude keywords
+        # Parse exclude keywords
         exclude_input: str = self.exclude_entry.text().strip()
         exclude_terms: List[str] = self.parse_keywords(exclude_input)
         
@@ -612,29 +650,8 @@ class LogInsight(QMainWindow):
         include_case_sensitive: bool = self.include_case_sensitive.isChecked()
         exclude_case_sensitive: bool = self.exclude_case_sensitive.isChecked()
         
-        include_patterns: List[Pattern] = []
-        for term in include_terms:
-            # consider it as normal string, rather than regular expression 
-            escaped_term = re.escape(term)
-            if include_case_sensitive:
-                include_patterns.append(re.compile(escaped_term))
-            else:
-                include_patterns.append(re.compile(escaped_term, re.IGNORECASE))
-        
-        exclude_patterns: List[Pattern] = []
-        for term in exclude_terms:
-            # consider it as normal string, rather than regular expression 
-            escaped_term = re.escape(term)
-            if exclude_case_sensitive:
-                exclude_patterns.append(re.compile(escaped_term))
-            else:
-                exclude_patterns.append(re.compile(escaped_term, re.IGNORECASE))
-        
-        
+        # Validate time formats (UI-specific validation)
         time_format: str = "%H:%M:%S.%f"
-        use_time_filter: bool = False
-        start_datetime: Optional[datetime] = None
-        end_datetime: Optional[datetime] = None
         
         # Validate start time format
         if start_time and not self.validate_time_format(start_time):
@@ -642,64 +659,27 @@ class LogInsight(QMainWindow):
             self.start_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; background-color: #FFDDDD; border: 1px solid #FF0000; } QLineEdit::placeholder { color: #888; font-style: italic; }")
             self.start_time_entry.setToolTip("Invalid time format! Please use format: HH:MM:SS.mmm")
             return "Invalid start time format, please use format: " + time_format, 0
-        elif start_time:
-            start_datetime = datetime.strptime(start_time, time_format)
-            use_time_filter = True
-        
+            
         # Validate end time format
         if end_time and not self.validate_time_format(end_time):
             # Highlight the input field with error style
             self.end_time_entry.setStyleSheet("QLineEdit { padding: 2px 4px; background-color: #FFDDDD; border: 1px solid #FF0000; } QLineEdit::placeholder { color: #888; font-style: italic; }")
             self.end_time_entry.setToolTip("Invalid time format! Please use format: HH:MM:SS.mmm")
             return "Invalid end time format, please use format: " + time_format, 0
-        elif end_time:
-            end_datetime = datetime.strptime(end_time, time_format)
-            use_time_filter = True
         
-        # Time regex pattern (matches HH:MM:SS.XXX at line start)
-        time_pattern: Pattern = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d{3})')
+        # Compile patterns
+        include_patterns = LogFilter.compile_patterns(include_terms, include_case_sensitive)
+        exclude_patterns = LogFilter.compile_patterns(exclude_terms, exclude_case_sensitive)
         
-        match_count: int = 0
-        # Use a list to collect matching lines instead of string concatenation
-        result_lines: List[str] = []
-        
-        for line in log_lines:
-            # Check for any exclude keywords (high priority)
-            if exclude_patterns and any(pattern.search(line) for pattern in exclude_patterns):
-                continue
-            
-            # Check for at least one include keyword
-            if include_patterns and not any(pattern.search(line) for pattern in include_patterns):
-                continue
-            
-            # Time filtering
-            if use_time_filter:
-                time_match = time_pattern.search(line)
-                if time_match:
-                    line_time_str = time_match.group(1)
-                    try:
-                        line_time = datetime.strptime(line_time_str, time_format)
-                        
-                        # Check time range
-                        if start_datetime and line_time < start_datetime:
-                            continue
-                        if end_datetime and line_time > end_datetime:
-                            continue
-                    except ValueError:
-                        # Skip time filtering if time parsing fails
-                        pass
-                # elif start_datetime or end_datetime:
-                #     # Skip line if time filtering is needed but no time found
-                #     continue
-            
-            # Add matching line to results list
-            result_lines.append(line)
-            match_count += 1
-        
-        # Join the collected lines into a single string for better performance
-        result_text = "".join(result_lines)
-        return result_text, match_count
-    
+        # Use the shared filtering logic
+        return LogFilter.filter_logs(
+            log_lines,
+            include_patterns,
+            exclude_patterns,
+            start_time,
+            end_time
+        )
+
     def search_log(self) -> None:
         if not self.log_content:
             QMessageBox.warning(self, "Warning", "Please open a log file first")
@@ -1177,9 +1157,6 @@ class LogInsight(QMainWindow):
         if not self.tail_log_btn.isChecked() or path != self.current_file:
             return
             
-        if not os.path.exists(path):
-            return
-
         # Get current file size
         current_size = os.path.getsize(path)
 
