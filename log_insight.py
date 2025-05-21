@@ -894,61 +894,69 @@ class LogInsight(QMainWindow):
         document = self.result_text.document()
         cursor = QTextCursor(document)
         
+        # Move cursor to start of document
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+
         # Set batch processing parameters
         batch_size = 1000  # Maximum matches per batch
         max_matches = 10000  # Maximum total matches limit
-        current_batch = 0
+        limit_reached = False  # Flag to track if we hit the max_matches limit
         
         # Create progress indicator
         self.statusBar().showMessage("Searching for matches...")
         QApplication.processEvents()  # Ensure UI updates
         
         # Find matches (batch processing)
-        while len(self.search_matches) < max_matches:
+        while True:
             # Process current batch
             batch_count = 0
             batch_start_time = time.time()
             
             while batch_count < batch_size and len(self.search_matches) < max_matches:
-                cursor = document.find(search_text, cursor)
-                if cursor.isNull():
+                # Find next occurrence, starting from current cursor position
+                found_cursor = document.find(search_text, cursor)
+                if found_cursor.isNull():
                     break
                 
                 # Save match position
-                match_position = cursor.position() - len(search_text)
+                match_position = found_cursor.position() - len(search_text)
                 self.search_matches.append(match_position)
                 batch_count += 1
                 
-                # Ensure cursor moves forward to avoid infinite loop
-                cursor.movePosition(QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.MoveAnchor, 1)
-            
-            # Exit loop if no more matches found or max matches reached
-            if batch_count == 0 or len(self.search_matches) >= max_matches:
+                # Update cursor position for next search
+                cursor = found_cursor
+                cursor.movePosition(QTextCursor.MoveOperation.Right)
+
+            # Exit loop if no more matches found in this batch
+            if batch_count == 0:
                 break
             
+            # Check if max matches limit was reached
+            if len(self.search_matches) >= max_matches:
+                limit_reached = True
+                break
+
             # Update status bar with progress
-            current_batch += 1
             self.statusBar().showMessage(f"Found {len(self.search_matches)} matches...")
             QApplication.processEvents()  # Ensure UI updates
             
-            # If batch processing is too fast (less than 50ms), increase batch size for efficiency
+            # Adjust batch size based on processing time
             batch_time = time.time() - batch_start_time
             if batch_time < 0.05 and batch_size < 5000:
                 batch_size = min(batch_size * 2, 5000)
-            # If batch processing is too slow (more than 200ms), decrease batch size for responsiveness
             elif batch_time > 0.2 and batch_size > 100:
                 batch_size = max(batch_size // 2, 100)
-        
+    
         # Highlight matches (only highlight matches near visible area)
         self.highlight_visible_matches()
-        
+    
         # If matches found, select the first one
         if self.search_matches:
             self.current_match_index = 0
             self.scroll_to_match(self.current_match_index)
-            
+        
             # Show message if max matches limit reached
-            if len(self.search_matches) >= max_matches:
+            if limit_reached:
                 self.statusBar().showMessage(f"Found over {max_matches} matches, showing first {max_matches} only")
             else:
                 self.statusBar().showMessage(f"Found {len(self.search_matches)} matches")
@@ -1437,3 +1445,4 @@ if __name__ == "__main__":
     window = LogInsight()
     window.showMaximized()  
     sys.exit(app.exec())
+
