@@ -494,6 +494,9 @@ class LogInsight(QMainWindow):
         # Hide or show control panel content
         self.control_content_widget.setVisible(not self.filter_collapsed)
         
+        # Save configuration when control panel state changes
+        self.save_config()
+        
     
     # Toggle include keywords case sensitive icon
     def toggle_include_case_sensitive(self, checked: bool) -> None:
@@ -506,6 +509,9 @@ class LogInsight(QMainWindow):
             self.include_case_sensitive.setIcon(self.case_sensitive_on_icon)
         else:
             self.include_case_sensitive.setIcon(self.case_sensitive_off_icon)
+        
+        # Save configuration when include case sensitive state changes
+        self.save_config()
     
     # Toggle exclude keywords case sensitive icon
     def toggle_exclude_case_sensitive(self, checked: bool) -> None:
@@ -518,6 +524,9 @@ class LogInsight(QMainWindow):
             self.exclude_case_sensitive.setIcon(self.case_sensitive_on_icon)
         else:
             self.exclude_case_sensitive.setIcon(self.case_sensitive_off_icon)
+        
+        # Save configuration when exclude case sensitive state changes
+        self.save_config()
     
     # Add theme toggle method
     def toggle_theme(self, checked: bool) -> None:
@@ -536,6 +545,9 @@ class LogInsight(QMainWindow):
             self.theme_toggle_btn.setIcon(QIcon(self.get_icon_path('THEME_LIGHT')))
             self.theme_toggle_btn.setToolTip("switch to dark theme")
             self.result_text.setStyleSheet("background-color: white; color: black;")
+        
+        # Save configuration when theme changes
+        self.save_config()
     
     def apply_styled_prompt_text(self) -> None:
         """Apply styled HTML format to the default prompt text
@@ -1125,6 +1137,9 @@ class LogInsight(QMainWindow):
         else:
             self.result_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
             self.word_wrap_btn.setIcon(QIcon(self.get_icon_path('WORD_WRAP_OFF')))
+        
+        # Save configuration when word wrap state changes
+        self.save_config()
     
     def toggle_tail_log(self, checked: bool) -> None:
         """Toggle log tail mode using QFileSystemWatcher
@@ -1132,6 +1147,17 @@ class LogInsight(QMainWindow):
         Args:
             checked: Whether the button is checked
         """
+        print(f"toggle_tail_log called with checked={checked}, current_file={self.current_file}")
+        print(f"Current file watcher files: {self.file_watcher.files()}")
+        
+        # Check if this is being called during startup/initialization
+        import traceback
+        stack = traceback.extract_stack()
+        caller_info = "Unknown"
+        if len(stack) > 1:
+            caller_info = f"{stack[-2].filename}:{stack[-2].lineno} in {stack[-2].name}"
+        print(f"Called from: {caller_info}")
+        
         if checked:
             # Update icon to ON state
             self.tail_log_btn.setIcon(QIcon(self.get_icon_path('TAIL_LOG_ON')))
@@ -1139,21 +1165,44 @@ class LogInsight(QMainWindow):
             if self.current_file and os.path.exists(self.current_file):
                 # Update last file position to current file size to only read new content
                 self.last_file_position = os.path.getsize(self.current_file)
+                print(f"Updated last_file_position to {self.last_file_position}")
+                
                 # Add file to watcher if not already watching
                 if self.current_file not in self.file_watcher.files():
+                    print(f"Adding file to watcher: {self.current_file}")
                     self.file_watcher.addPath(self.current_file)
+                    print(f"File watcher files after adding: {self.file_watcher.files()}")
+                else:
+                    print(f"File already in watcher: {self.current_file}")
+                    
                 self.statusBar().showMessage("Log tail mode started")
+                print(f"Log tail mode started for file: {self.current_file}")
             else:
+                print(f"Cannot enable tail mode: current_file={self.current_file}, exists={self.current_file and os.path.exists(self.current_file)}")
                 self.tail_log_btn.setChecked(False)
                 QMessageBox.warning(self, "Warning", "Please open a log file first")
+                print("Warning dialog shown: Please open a log file first")
+                return  # Don't save config in this case
         else:
             # Update icon to OFF state
             self.tail_log_btn.setIcon(QIcon(self.get_icon_path('TAIL_LOG_OFF')))
             
             # Remove file from watcher
             if self.current_file and self.current_file in self.file_watcher.files():
+                print(f"Removing file from watcher: {self.current_file}")
                 self.file_watcher.removePath(self.current_file)
+                print(f"File watcher files after removing: {self.file_watcher.files()}")
+            else:
+                print(f"No file to remove from watcher: current_file={self.current_file}")
+                
             self.statusBar().showMessage("Log tail mode stopped")
+            print("Log tail mode stopped")
+        
+        # Save configuration when tail log state changes
+        print(f"Saving configuration with tail_log_checked={self.tail_log_btn.isChecked()}")
+        self.save_config()
+        print(f"Configuration saved with tail_log_checked={self.tail_log_btn.isChecked()}")
+
     
     def on_file_changed(self, path: str) -> None:
         """Handle file change events from QFileSystemWatcher
@@ -1262,12 +1311,16 @@ class LogInsight(QMainWindow):
         return [keyword.strip() for keyword in keywords if keyword.strip()]
     
     def load_config(self) -> None:
+        print("Loading configuration...")
         if not os.path.exists(self.CONFIG_FILE):
+            print(f"Configuration file not found: {self.CONFIG_FILE}")
             return
             
         try:
             with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
                 config = json.load(f)
+            print(f"Configuration loaded: {config}")
+
                 
             # restore search conditions
             if "include_keywords" in config and config["include_keywords"]:
@@ -1315,8 +1368,8 @@ class LogInsight(QMainWindow):
                 if self.filter_collapsed:
                     self.control_toggle_btn.setText("▶")
                     self.control_content_widget.setVisible(False)
-                
-            # restore last open file
+                    
+            # First restore last open file
             if "last_file" in config and config["last_file"] and os.path.exists(config["last_file"]):
                 self.current_file = config["last_file"]
                 with open(self.current_file, 'r', encoding='utf-8', errors='ignore') as file:
@@ -1326,9 +1379,29 @@ class LogInsight(QMainWindow):
                 self.setWindowTitle(f"LogInsight - {self.current_file}")
                 self.result_text.setText("".join(self.log_content))
                 
-                # add file to watcher if tail mode is enabled
-                if self.tail_log_btn.isChecked():
-                    self.file_watcher.addPath(self.current_file)
+                # Then restore tail log button state only if we have a valid file
+                if "tail_log_checked" in config:
+                    print(f"Restoring tail log button state: {config['tail_log_checked']}")
+                    # Temporarily disconnect the toggled signal to avoid triggering the toggle_tail_log function
+                    self.tail_log_btn.toggled.disconnect(self.toggle_tail_log)
+                    self.tail_log_btn.setChecked(config["tail_log_checked"])
+                    # Reconnect the toggled signal
+                    self.tail_log_btn.toggled.connect(self.toggle_tail_log)
+                    print(f"Tail log button state restored without triggering toggle_tail_log")
+                    
+                    # add file to watcher if tail mode is enabled
+                    if self.tail_log_btn.isChecked():
+                        print(f"Adding file to watcher: {self.current_file}")
+                        if self.current_file not in self.file_watcher.files():
+                            self.file_watcher.addPath(self.current_file)
+                            print(f"File added to watcher: {self.current_file}")
+                        else:
+                            print(f"File already in watcher: {self.current_file}")
+            else:
+                # No valid file exists, ensure tail log is off
+                if "tail_log_checked" in config:
+                    print("No valid file exists, setting tail log button to unchecked")
+                    self.tail_log_btn.setChecked(False)
                 
         except Exception as e:
             self.statusBar().showMessage(f"Failed to load configuration: {str(e)}")
@@ -1347,7 +1420,8 @@ class LogInsight(QMainWindow):
             "last_file": self.current_file if self.current_file else "",
             "theme": self.theme_toggle_btn.isChecked(),  # Add theme configuration
             "filter_collapsed": self.filter_collapsed,  # Save filter collapse state
-            "button_collapsed": self.button_collapsed  # Save button area collapse state
+            "button_collapsed": self.button_collapsed,  # Save button area collapse state
+            "tail_log_checked": self.tail_log_btn.isChecked() # Save tail log button state
         }
         
         try:
@@ -1400,7 +1474,7 @@ class LogInsight(QMainWindow):
                     self.result_text.setAlignment(Qt.AlignmentFlag.AlignLeft)
                     self.result_text.setText("".join(self.log_content))
                     
-                    # Add file to watcher if tail mode is active
+                    # Add file to watcher if tail mode is enabled
                     if self.tail_log_btn.isChecked():
                         self.file_watcher.addPath(self.current_file)
                     
