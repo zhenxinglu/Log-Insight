@@ -268,6 +268,10 @@ class LogInsight(QMainWindow):
         self.control_title.setStyleSheet("font-weight: bold;")
         self.title_layout.addWidget(self.control_title)
         
+        # Enable mouse tracking for double click event
+        self.title_widget.setMouseTracking(True)
+        self.title_widget.mouseDoubleClickEvent = self.toggle_control_panel
+        
         self.title_layout.addStretch()
         
         # Add collapse/expand button
@@ -480,10 +484,8 @@ class LogInsight(QMainWindow):
         self.statusBar().addPermanentWidget(self.help_btn)
     
     # Collapse/Expand control panel
-    def toggle_control_panel(self) -> None:
-        """Collapse or expand control panel (including filters and operations)
-        """
-        # Use existing collapse state variable for compatibility
+    def toggle_control_panel(self, event=None) -> None:
+        """Toggle the visibility of the control panel content"""
         self.filter_collapsed = not self.filter_collapsed
         self.button_collapsed = self.filter_collapsed  # Keep states synchronized
         

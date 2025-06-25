@@ -24,6 +24,7 @@ This project is a log file viewing tool developed with Python and PyQt. It provi
 - Remembers last opened file path and options, restores the last opened log file and search conditions when reopening the program
 - Font size adjustment (Use Ctrl+mouse wheel to zoom in/out text in the result area)
 - In-result area search function (Press Ctrl+F to open search dialog, supports keyword highlighting and navigation)
+- Collapse/Expand Control Panel by double-clicking its header
 
 
 ## Usage Instructions
