@@ -151,6 +151,7 @@ class FilterWorker(QThread):
         self.exclude_patterns = LogFilter.compile_patterns(
             self.exclude_terms, self.exclude_case_sensitive)
     
+    @override
     def run(self):
         """Run the filtering process in background thread"""
         # Use the shared filtering logic
@@ -162,7 +163,6 @@ class FilterWorker(QThread):
             self.end_time
         )
         
-        # Emit signal with results
         self.filteringComplete.emit(result_text, match_count)
 
 class LogInsight(QMainWindow):
@@ -599,14 +599,14 @@ class LogInsight(QMainWindow):
             try:
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
                     self.log_content = file.readlines()
+                    self.last_file_position = file.tell()
                 
                 # Remove previous file from watcher if exists
                 if self.current_file and self.current_file in self.file_watcher.files():
                     self.file_watcher.removePath(self.current_file)
                 
                 self.current_file = file_path
-                # Reset file position tracker when opening a new file
-                self.last_file_position = 0
+                
                 
                 self.statusBar().showMessage(f"File loaded: {os.path.basename(file_path)} - {len(self.log_content)} lines")
                 # Update window title to show file path
@@ -1162,8 +1162,11 @@ class LogInsight(QMainWindow):
         Args:
             path: Path to the changed file
         """
-        # Quick exit if not tailing or not the current file
-        if not self.tail_log_btn.isChecked() or path != self.current_file:
+        if not self.tail_log_btn.isChecked() :
+            return
+            
+        if path != self.current_file:
+            print(f"Warning: File change event received for {path} but current file is {self.current_file}")
             return
             
         # Get current file size
@@ -1181,7 +1184,7 @@ class LogInsight(QMainWindow):
 
             new_content = file.read()
             # Update last position for next read
-            self.last_file_position = current_size
+            self.last_file_position = file.tell()
 
         # Process new content in background thread if there's content
         if new_content:
@@ -1264,14 +1267,13 @@ class LogInsight(QMainWindow):
     
     def load_config(self) -> None:
         if not os.path.exists(self.CONFIG_FILE):
-            print(f"Configuration file not found: {self.CONFIG_FILE}")
+            self.statusBar().showMessage("No configuration file found")
             return
             
         try:
             with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             print(f"Configuration loaded: {config}")
-
                 
             # restore search conditions
             if "include_keywords" in config and config["include_keywords"]:
@@ -1325,6 +1327,7 @@ class LogInsight(QMainWindow):
                 self.current_file = config["last_file"]
                 with open(self.current_file, 'r', encoding='utf-8', errors='ignore') as file:
                     self.log_content = file.readlines()
+                    self.last_file_position = file.tell()
                 
                 self.statusBar().showMessage(f"File loaded: {os.path.basename(self.current_file)} - {len(self.log_content)} lines")
                 self.setWindowTitle(f"LogInsight - {self.current_file}")
@@ -1338,7 +1341,6 @@ class LogInsight(QMainWindow):
                     self.tail_log_btn.setChecked(config["tail_log_checked"])
                     # Reconnect the toggled signal
                     self.tail_log_btn.toggled.connect(self.toggle_tail_log)
-                    print(f"Tail log button state restored without triggering toggle_tail_log")
                     
                     # add file to watcher if tail mode is enabled
                     if self.tail_log_btn.isChecked():
