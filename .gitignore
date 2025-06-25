@@ -3,3 +3,16 @@ build/
 dist/
 .vscode
 .lingma/
+LogInsight.spec
+.trae/.ignore
+.trae/rules/project_rules.md
+.idea/.gitignore
+.idea/LogInsight.iml
+.idea/MarsCodeWorkspaceAppSettings.xml
+.idea/misc.xml
+.idea/modules.xml
+.idea/vcs.xml
+.idea/inspectionProfiles/Project_Default.xml
+.idea/libraries/base_library.xml
+__pycache__/help_content.cpython-313.pyc
+__pycache__/log_insight_pyqt.cpython-313.pyc
