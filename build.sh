@@ -3,7 +3,11 @@
 echo "clean up the build folder..."
 rm -rf dist/* build/*
 
+echo "reading version..."
+version=$(cat version.txt)
+echo "version: $version"
+
 echo "packing..."
-pyinstaller --onefile --windowed --name LogInsight --add-data "icons:icons" log_insight.py
+pyinstaller --onefile --windowed --name "LogInsight-$version" --add-data "icons:icons" log_insight.py
 
 echo "packing done, installer located in dist folder."
