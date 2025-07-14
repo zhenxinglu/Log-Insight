@@ -1324,7 +1324,7 @@ class LogInsight(QMainWindow):
                     self.control_toggle_btn.setText("▶")
                     self.control_content_widget.setVisible(False)
                     
-            # First restore last open file
+            # First restore last open file and apply filters
             if "last_file" in config and config["last_file"] and os.path.exists(config["last_file"]):
                 self.current_file = config["last_file"]
                 with open(self.current_file, 'r', encoding='utf-8', errors='ignore') as file:
@@ -1333,7 +1333,21 @@ class LogInsight(QMainWindow):
                 
                 self.statusBar().showMessage(f"File loaded: {os.path.basename(self.current_file)} - {len(self.log_content)} lines")
                 self.setWindowTitle(f"LogInsight - {self.current_file}")
-                self.result_text.setText("".join(self.log_content))
+                
+                # Apply filters if any filter conditions exist
+                if (self.include_entry.text().strip() or 
+                    self.exclude_entry.text().strip() or 
+                    self.start_time_entry.text().strip() or 
+                    self.end_time_entry.text().strip()):
+                    result_text, match_count = self.filter_log_content(self.log_content)
+                    if match_count == 0:
+                        self.result_text.setText("No matching results found.\n")
+                    else:
+                        self.result_text.setText(result_text)
+                        self.statusBar().showMessage(f"Found {match_count} matches")
+                else:
+                    # If no filters, show all content
+                    self.result_text.setText("".join(self.log_content))
                 
                 # Then restore tail log button state only if we have a valid file
                 if "tail_log_checked" in config:
