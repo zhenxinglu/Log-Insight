@@ -168,6 +168,14 @@ class FilterWorker(QThread):
 class LogInsight(QMainWindow):
     CONFIG_FILE: str = os.path.join(os.path.expanduser('~'), "logInsight.json")
     
+    # Add version information
+    VERSION: str = ""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.txt"), "r") as f:
+            VERSION = f.read().strip()
+    except:
+        VERSION = "unknown"
+    
     # Base path for icons
     ICONS_DIR: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
     
@@ -204,7 +212,7 @@ class LogInsight(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         
-        self.setWindowTitle("Log Insight")
+        self.setWindowTitle(f"LogInsight v{self.VERSION}")
         
         # Set application icon
         app_icon = QIcon(self.get_icon_path('APP_LOGO'))
@@ -612,7 +620,7 @@ class LogInsight(QMainWindow):
                 
                 self.statusBar().showMessage(f"File loaded: {os.path.basename(file_path)} - {len(self.log_content)} lines")
                 # Update window title to show file path
-                self.setWindowTitle(f"Log Insight - {file_path}")
+                self.setWindowTitle(f"LogInsight v{self.VERSION} - {file_path}")
                 
                 # Display log content in results area
                 self.result_text.setAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -1332,7 +1340,7 @@ class LogInsight(QMainWindow):
                     self.last_file_position = file.tell()
                 
                 self.statusBar().showMessage(f"File loaded: {os.path.basename(self.current_file)} - {len(self.log_content)} lines")
-                self.setWindowTitle(f"LogInsight - {self.current_file}")
+                self.setWindowTitle(f"LogInsight v{self.VERSION} - {self.current_file}")
                 
                 # Apply filters if any filter conditions exist
                 if (self.include_entry.text().strip() or 
@@ -1435,31 +1443,8 @@ class LogInsight(QMainWindow):
             
             # If it's a valid file path, open the file
             if file_path and os.path.isfile(file_path):
-                try:
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
-                        self.log_content = file.readlines()
-                    
-                    # Remove previous file from watcher if exists
-                    if self.current_file and self.current_file in self.file_watcher.files():
-                        self.file_watcher.removePath(self.current_file)
-                    
-                    self.current_file = file_path
-                    self.statusBar().showMessage(f"File loaded: {os.path.basename(file_path)} - {len(self.log_content)} lines")
-                    self.clear_results()
-                    self.setWindowTitle(f"LogInsight - {file_path}")
-                    
-                    # Display log content in results area
-                    self.result_text.setAlignment(Qt.AlignmentFlag.AlignLeft)
-                    self.result_text.setText("".join(self.log_content))
-                    
-                    # Add file to watcher if tail mode is enabled
-                    if self.tail_log_btn.isChecked():
-                        self.file_watcher.addPath(self.current_file)
-                except Exception as e:
-                    self.current_file = None
-                    self.clear_results()
-                    QMessageBox.critical(self, "Error", f"Cannot open file: {str(e)}")
-
+                self.open_log_file(file_path)  # Use open_log_file instead of duplicating code
+                
 
     def show_help_dialog(self) -> None:
         """Show help dialog with application features and shortcuts"""
