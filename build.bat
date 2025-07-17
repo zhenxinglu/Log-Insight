@@ -8,7 +8,7 @@ set /p VERSION=<version.txt
 echo Version: %VERSION%
 
 echo Packing...
-pyinstaller --onefile --windowed --name "LogInsight-%VERSION%"  --add-data "icons;icons" log_insight.py
+pyinstaller --onefile --windowed --name "LogInsight-%VERSION%" --icon="icons\logo.ico" --add-data "icons;icons" log_insight.py
 
 echo Packing done, installer located in dist folder.
 pause

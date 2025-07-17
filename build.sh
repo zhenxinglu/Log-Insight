@@ -8,6 +8,6 @@ version=$(cat version.txt)
 echo "version: $version"
 
 echo "packing..."
-pyinstaller --onefile --windowed --name "LogInsight-$version" --add-data "icons:icons" log_insight.py
+pyinstaller --onefile --windowed --name "LogInsight-$version" --icon="icons/logo.ico" --add-data "icons:icons" log_insight.py
 
 echo "packing done, installer located in dist folder."
